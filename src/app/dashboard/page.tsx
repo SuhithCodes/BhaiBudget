@@ -39,6 +39,7 @@ import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear,
 import { DatePickerWithRange } from "@/components/ui/date-range-picker"
 import { ResponsiveSankey } from "@/components/dashboard/responsive-sankey"
 import { PARENT_CATEGORIES as PARENT_CATEGORIES_CONST } from "@/lib/constants"
+import { VoiceTransactionAgent } from "@/components/voice/voice-transaction-agent"
 
 export default function DashboardPage() {
     const { user } = useAuth();
@@ -332,94 +333,97 @@ export default function DashboardPage() {
     }
 
     return (
-        <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8 container mx-auto">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-                <h1 className="font-headline text-3xl font-semibold">Dashboard</h1>
-                <div className="flex items-center gap-2">
-                    <Dialog open={isIncomeFormOpen} onOpenChange={setIsIncomeFormOpen}>
-                        <DialogTrigger asChild>
-                            <Button variant="outline">
-                                <Banknote className="mr-2 h-4 w-4" />
-                                Add Income
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-h-[95vh] overflow-y-auto p-4 sm:p-6">
-                            <DialogHeader className="mb-4">
-                                <DialogTitle>Add New Income</DialogTitle>
-                                <DialogDescription>
-                                    Record money you received.
-                                </DialogDescription>
-                            </DialogHeader>
-                            <IncomeForm onSubmit={handleIncomeAdded} />
-                        </DialogContent>
-                    </Dialog>
-                    <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-                        <DialogTrigger asChild>
-                            <Button>
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                Add Expense
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-h-[95vh] overflow-y-auto p-4 sm:p-6">
-                            <DialogHeader className="mb-4">
-                                <DialogTitle>Add New Expense</DialogTitle>
-                                <DialogDescription>
-                                    Upload or scan a receipt to automatically extract expense details.
-                                </DialogDescription>
-                            </DialogHeader>
-                            <ExpenseForm onSubmit={handleExpenseAdded} />
-                        </DialogContent>
-                    </Dialog>
-                </div>
-            </div>
-            <div className="grid gap-8">
-                <div className="flex flex-wrap items-center gap-2">
-                    <DatePickerWithRange date={dateRange} setDate={setDateRange} />
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="flex items-center gap-2">
-                                <span>Presets</span>
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => setDatePreset('today')}>Today</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setDatePreset('yesterday')}>Yesterday</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setDatePreset('thisWeek')}>This Week</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setDatePreset('lastWeek')}>Last Week</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setDatePreset('last7Days')}>Last 7 Days</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setDatePreset('thisMonth')}>This Month</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setDatePreset('thisQuarter')}>This Quarter</DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setDatePreset('thisYear')}>This Year</DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-                <DashboardSummary expenses={filteredExpenses} incomes={filteredIncomes} />
-                <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">
-                    <div className="lg:col-span-3">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Financial Flow</CardTitle>
-                            </CardHeader>
-                            <CardContent className="h-[400px] w-full p-0">
-                                {sankeyData.nodes.length > 1 && sankeyData.links.length > 0 ? (
-                                    <ResponsiveSankey data={sankeyData} height={400} />
-                                ) : (
-                                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                                        <p className="text-center">No data for this period. <br /> Try adjusting the date filter.</p>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </div>
-                    <div className="lg:col-span-2">
-                        <ExpenseList
-                            expenses={recentExpenses}
-                            onExpenseDeleted={handleExpenseDeleted}
-                            onExpenseUpdated={handleExpenseUpdated}
-                        />
+        <>
+            <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8 container mx-auto">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                    <h1 className="font-headline text-3xl font-semibold">Dashboard</h1>
+                    <div className="flex items-center gap-2">
+                        <Dialog open={isIncomeFormOpen} onOpenChange={setIsIncomeFormOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="outline">
+                                    <Banknote className="mr-2 h-4 w-4" />
+                                    Add Income
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-h-[95vh] overflow-y-auto p-4 sm:p-6">
+                                <DialogHeader className="mb-4">
+                                    <DialogTitle>Add New Income</DialogTitle>
+                                    <DialogDescription>
+                                        Record money you received.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <IncomeForm onSubmit={handleIncomeAdded} />
+                            </DialogContent>
+                        </Dialog>
+                        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+                            <DialogTrigger asChild>
+                                <Button>
+                                    <PlusCircle className="mr-2 h-4 w-4" />
+                                    Add Expense
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-h-[95vh] overflow-y-auto p-4 sm:p-6">
+                                <DialogHeader className="mb-4">
+                                    <DialogTitle>Add New Expense</DialogTitle>
+                                    <DialogDescription>
+                                        Upload or scan a receipt to automatically extract expense details.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <ExpenseForm onSubmit={handleExpenseAdded} />
+                            </DialogContent>
+                        </Dialog>
                     </div>
                 </div>
-            </div>
-        </main>
+                <div className="grid gap-8">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <DatePickerWithRange date={dateRange} setDate={setDateRange} />
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="flex items-center gap-2">
+                                    <span>Presets</span>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onSelect={() => setDatePreset('today')}>Today</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setDatePreset('yesterday')}>Yesterday</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setDatePreset('thisWeek')}>This Week</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setDatePreset('lastWeek')}>Last Week</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setDatePreset('last7Days')}>Last 7 Days</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setDatePreset('thisMonth')}>This Month</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setDatePreset('thisQuarter')}>This Quarter</DropdownMenuItem>
+                                <DropdownMenuItem onSelect={() => setDatePreset('thisYear')}>This Year</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                    <DashboardSummary expenses={filteredExpenses} incomes={filteredIncomes} />
+                    <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">
+                        <div className="lg:col-span-3">
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Financial Flow</CardTitle>
+                                </CardHeader>
+                                <CardContent className="h-[400px] w-full p-0">
+                                    {sankeyData.nodes.length > 1 && sankeyData.links.length > 0 ? (
+                                        <ResponsiveSankey data={sankeyData} height={400} />
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                                            <p className="text-center">No data for this period. <br /> Try adjusting the date filter.</p>
+                                        </div>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+                        <div className="lg:col-span-2">
+                            <ExpenseList
+                                expenses={recentExpenses}
+                                onExpenseDeleted={handleExpenseDeleted}
+                                onExpenseUpdated={handleExpenseUpdated}
+                            />
+                        </div>
+                    </div>
+                </div>
+            </main>
+            <VoiceTransactionAgent />
+        </>
     )
 }
