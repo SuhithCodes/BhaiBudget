@@ -73,7 +73,7 @@ export function Header() {
       <div className="container flex h-16 items-center">
         <Link href="/dashboard" className="mr-4 flex items-center">
           <ReceiptText className="h-7 w-7 text-primary" />
-          <span className="ml-3 font-bold font-headline text-xl">BhaiBudget</span>
+          <span className="ml-3 font-bold font-headline text-xl">YABA</span>
         </Link>
         <div className="ml-2 hidden sm:flex items-center">
           <div className="flex items-center gap-2 rounded-full border px-3 py-1.5 bg-background/60">

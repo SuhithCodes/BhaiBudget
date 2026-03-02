@@ -23,6 +23,7 @@ import {
 import { BudgetForm } from "./budget-form";
 import { useMemo, useState } from "react";
 import { startOfMonth, startOfWeek, startOfYear, endOfMonth, endOfWeek, endOfYear, parseISO, isWithinInterval, differenceInCalendarDays, startOfDay } from 'date-fns';
+import { cn } from "@/lib/utils";
 
 interface BudgetListProps {
     budgets: Budget[];
@@ -58,7 +59,8 @@ export function BudgetList({ budgets, expenses, onBudgetDeleted, onBudgetUpdated
                 .reduce((sum, expense) => sum + expense.totalAmount, 0);
 
             const remaining = budget.amount - spent;
-            const progress = (spent / budget.amount) * 100;
+            const progress = Math.min((spent / budget.amount) * 100, 100); // Fix 7: Cap at 100%
+            const isOverspent = spent > budget.amount;
 
             // Pacing logic
             const today = startOfDay(new Date());
@@ -68,7 +70,7 @@ export function BudgetList({ budgets, expenses, onBudgetDeleted, onBudgetUpdated
             const spentRatio = spent / budget.amount;
             const pacingAlert = spentRatio > periodElapsed && spent < budget.amount;
 
-            return { ...budget, spent, remaining, progress, pacingAlert, spentRatio, periodElapsed };
+            return { ...budget, spent, remaining, progress, isOverspent, pacingAlert, spentRatio, periodElapsed };
         });
     }, [budgets, expenses]);
 
@@ -89,8 +91,16 @@ export function BudgetList({ budgets, expenses, onBudgetDeleted, onBudgetUpdated
                         <CardHeader>
                             <CardTitle>{budget.name}</CardTitle>
                             <CardDescription>{budget.category} - {budget.period}</CardDescription>
+                            {budget.isOverspent && (
+                                <div className="mt-2 p-2 rounded bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 text-sm font-medium flex items-center gap-2">
+                                    <span>🚨</span>
+                                    <span>
+                                        Over budget by ${(budget.spent - budget.amount).toFixed(2)}!
+                                    </span>
+                                </div>
+                            )}
                             {budget.pacingAlert && (
-                                <div className="mt-2 p-2 rounded bg-yellow-100 text-yellow-800 text-sm font-medium flex items-center gap-2">
+                                <div className="mt-2 p-2 rounded bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 text-sm font-medium flex items-center gap-2">
                                     <span>⚠️</span>
                                     <span>
                                         You are pacing to overspend this {budget.period.toLowerCase()}!<br />
@@ -102,25 +112,30 @@ export function BudgetList({ budgets, expenses, onBudgetDeleted, onBudgetUpdated
                         <CardContent className="space-y-2">
                             <div className="flex justify-between text-sm">
                                 <span className="text-muted-foreground">Spent</span>
-                                <span>${budget.spent.toFixed(2)}</span>
+                                <span className={cn(budget.isOverspent && "text-red-600 dark:text-red-400 font-semibold")}>${budget.spent.toFixed(2)}</span>
                             </div>
-                            <Progress value={budget.progress} />
+                            <Progress
+                                value={budget.progress}
+                                className={cn(budget.isOverspent && "[&>div]:bg-red-600")}
+                            />
                             <div className="flex justify-between text-sm">
                                 <span className="text-muted-foreground">Remaining</span>
-                                <span>${budget.remaining.toFixed(2)}</span>
+                                <span className={cn(
+                                    budget.remaining < 0 && "text-red-600 dark:text-red-400 font-semibold"
+                                )}>${budget.remaining.toFixed(2)}</span>
                             </div>
                         </CardContent>
                         <CardFooter className="flex justify-end gap-2">
-                            <Button 
-                                variant="outline" 
+                            <Button
+                                variant="outline"
                                 size="sm"
                                 onClick={() => setBudgetToEdit(budget)}
                             >
                                 Edit
                             </Button>
-                            <Button 
-                                variant="destructive" 
-                                size="sm" 
+                            <Button
+                                variant="destructive"
+                                size="sm"
                                 onClick={() => setBudgetToDelete(budget)}
                             >
                                 Delete

@@ -1,4 +1,4 @@
-# **App Name**: MavBudget: The Student Budgeting App
+# **App Name**: YABA: Yet Another Budgeting App
 
 ## Core Features:
 

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { type Budget, type BudgetFormData, budgetFormSchema } from '@/types';
 import { Loader2 } from 'lucide-react';
 import { useEffect } from 'react';
+import { EXPENSE_CATEGORIES } from '@/lib/constants';
 
 interface BudgetFormProps {
     onSubmit: (budget: BudgetFormData) => void;
@@ -54,9 +55,23 @@ export function BudgetForm({ onSubmit, initialData }: BudgetFormProps) {
                 )}
             </div>
             <div className="space-y-1.5">
-                <Label htmlFor="category">Category</Label>
-                <Input id="category" {...form.register('category')} placeholder="e.g., Food, Transport" />
-                 {form.formState.errors.category && (
+                <Label>Category</Label>
+                <Select
+                    onValueChange={(value) => form.setValue('category', value, { shouldValidate: true })}
+                    value={form.watch('category')}
+                >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Select a category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {EXPENSE_CATEGORIES.map((category) => (
+                            <SelectItem key={category} value={category}>
+                                {category}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                {form.formState.errors.category && (
                     <p className="text-sm text-destructive">{form.formState.errors.category.message}</p>
                 )}
             </div>
@@ -64,7 +79,7 @@ export function BudgetForm({ onSubmit, initialData }: BudgetFormProps) {
                 <div className="space-y-1.5">
                     <Label htmlFor="amount">Amount</Label>
                     <Input id="amount" type="number" step="0.01" {...form.register('amount', { valueAsNumber: true })} placeholder="100.00" />
-                     {form.formState.errors.amount && (
+                    {form.formState.errors.amount && (
                         <p className="text-sm text-destructive">{form.formState.errors.amount.message}</p>
                     )}
                 </div>
@@ -83,9 +98,9 @@ export function BudgetForm({ onSubmit, initialData }: BudgetFormProps) {
                 </div>
             </div>
             <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
-                 {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {initialData ? 'Update Budget' : 'Save Budget'}
             </Button>
         </form>
     );
-} 
+}

@@ -38,6 +38,7 @@ import { DateRange } from "react-day-picker"
 import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfQuarter, endOfQuarter, startOfDay, endOfDay } from "date-fns"
 import { DatePickerWithRange } from "@/components/ui/date-range-picker"
 import { ResponsiveSankey } from "@/components/dashboard/responsive-sankey"
+import { PARENT_CATEGORIES as PARENT_CATEGORIES_CONST } from "@/lib/constants"
 
 export default function DashboardPage() {
     const { user } = useAuth();
@@ -193,17 +194,15 @@ export default function DashboardPage() {
     }, [incomes, dateRange]);
 
     const sankeyData = useMemo((): SankeyData => {
-        const PARENT_CATEGORIES: Record<string, string[]> = {
-            'Needs': ["Housing", "Transportation", "Food", "Utilities", "Healthcare"],
-            'Wants': ["Personal Care", "Entertainment", "Shopping"],
-            'Financial Goals': ["Debt Payments", "Savings & Investments"],
-            'Other': ["Miscellaneous"]
-        };
+        const PARENT_CATS: Record<string, string[]> = {};
+        for (const key in PARENT_CATEGORIES_CONST) {
+            PARENT_CATS[key] = [...PARENT_CATEGORIES_CONST[key]];
+        }
 
         // Build a reverse lookup: child category → parent category
         const childToParent: Record<string, string> = {};
-        for (const parent in PARENT_CATEGORIES) {
-            for (const child of PARENT_CATEGORIES[parent]) {
+        for (const parent in PARENT_CATS) {
+            for (const child of PARENT_CATS[parent]) {
                 childToParent[child] = parent;
             }
         }
@@ -236,7 +235,7 @@ export default function DashboardPage() {
         // FIX #4: Prefix all node IDs to prevent collisions between income sources,
         // parent categories, child categories, and special nodes.
         const CENTRAL_ID = "central-budget";
-        nodes.push({ nodeId: CENTRAL_ID, name: "Total Income" });
+        nodes.push({ nodeId: CENTRAL_ID, name: "Budget" });
 
         // Income sources → Central node
         if (totalIncome > 0) {
@@ -264,8 +263,8 @@ export default function DashboardPage() {
         // FIX #3: Route uncategorized expenses into "Other"
         for (const category in expenseByCategory) {
             if (!childToParent[category]) {
-                if (!PARENT_CATEGORIES['Other'].includes(category)) {
-                    PARENT_CATEGORIES['Other'].push(category);
+                if (!PARENT_CATS['Other'].includes(category)) {
+                    PARENT_CATS['Other'].push(category);
                     childToParent[category] = 'Other';
                 }
             }
@@ -273,9 +272,9 @@ export default function DashboardPage() {
 
         // Central node → Parent categories → Child categories
         const parentCategoryTotals: { [key: string]: number } = {};
-        for (const parent in PARENT_CATEGORIES) {
+        for (const parent in PARENT_CATS) {
             parentCategoryTotals[parent] = 0;
-            for (const child of PARENT_CATEGORIES[parent]) {
+            for (const child of PARENT_CATS[parent]) {
                 if (expenseByCategory[child]) {
                     parentCategoryTotals[parent] += expenseByCategory[child];
                 }
@@ -288,7 +287,7 @@ export default function DashboardPage() {
                 nodes.push({ nodeId: parentId, name: parent });
                 links.push({ source: CENTRAL_ID, target: parentId, value: parentCategoryTotals[parent] });
 
-                for (const child of PARENT_CATEGORIES[parent]) {
+                for (const child of PARENT_CATS[parent]) {
                     if (expenseByCategory[child]) {
                         const childId = `cat-${child}`;
                         nodes.push({ nodeId: childId, name: child });
@@ -374,32 +373,32 @@ export default function DashboardPage() {
                 </div>
             </div>
             <div className="grid gap-8">
-                <DashboardSummary expenses={expenses} incomes={incomes} />
+                <div className="flex flex-wrap items-center gap-2">
+                    <DatePickerWithRange date={dateRange} setDate={setDateRange} />
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="flex items-center gap-2">
+                                <span>Presets</span>
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => setDatePreset('today')}>Today</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setDatePreset('yesterday')}>Yesterday</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setDatePreset('thisWeek')}>This Week</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setDatePreset('lastWeek')}>Last Week</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setDatePreset('last7Days')}>Last 7 Days</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setDatePreset('thisMonth')}>This Month</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setDatePreset('thisQuarter')}>This Quarter</DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => setDatePreset('thisYear')}>This Year</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+                <DashboardSummary expenses={filteredExpenses} incomes={filteredIncomes} />
                 <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">
                     <div className="lg:col-span-3">
                         <Card>
-                            <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <CardHeader>
                                 <CardTitle>Financial Flow</CardTitle>
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <DatePickerWithRange date={dateRange} setDate={setDateRange} />
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild>
-                                            <Button variant="outline" className="flex items-center gap-2">
-                                                <span>Presets</span>
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuItem onSelect={() => setDatePreset('today')}>Today</DropdownMenuItem>
-                                            <DropdownMenuItem onSelect={() => setDatePreset('yesterday')}>Yesterday</DropdownMenuItem>
-                                            <DropdownMenuItem onSelect={() => setDatePreset('thisWeek')}>This Week</DropdownMenuItem>
-                                            <DropdownMenuItem onSelect={() => setDatePreset('lastWeek')}>Last Week</DropdownMenuItem>
-                                            <DropdownMenuItem onSelect={() => setDatePreset('last7Days')}>Last 7 Days</DropdownMenuItem>
-                                            <DropdownMenuItem onSelect={() => setDatePreset('thisMonth')}>This Month</DropdownMenuItem>
-                                            <DropdownMenuItem onSelect={() => setDatePreset('thisQuarter')}>This Quarter</DropdownMenuItem>
-                                            <DropdownMenuItem onSelect={() => setDatePreset('thisYear')}>This Year</DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </div>
                             </CardHeader>
                             <CardContent className="h-[400px] w-full p-0">
                                 {sankeyData.nodes.length > 1 && sankeyData.links.length > 0 ? (

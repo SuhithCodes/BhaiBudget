@@ -1,4 +1,4 @@
-# MavBudget: Student Budgeting Made Simple
+# YABA: Yet Another Budgeting App
 
 A modern, intuitive budgeting application designed specifically for students to manage their finances effectively.
 
@@ -49,8 +49,8 @@ A modern, intuitive budgeting application designed specifically for students to 
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/mavbudget.git
-   cd mavbudget
+   git clone https://github.com/yourusername/yaba.git
+   cd yaba
    ```
 
 2. **Install dependencies**
@@ -149,4 +149,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📞 Support
 
-For support, email support@mavbudget.com or join our Discord channel.
+For support, email support@yaba.com or join our Discord channel.

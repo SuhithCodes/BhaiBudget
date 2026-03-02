@@ -10,6 +10,7 @@
  */
 
 import { groq, TEXT_MODEL, DEFAULT_SETTINGS } from '@/ai/groq';
+import { EXPENSE_CATEGORIES } from '@/lib/constants';
 
 export interface CategorizeExpenseInput {
   description: string;
@@ -31,13 +32,14 @@ Vendor: ${input.vendor}
 Amount: ${input.amount}
 Date: ${input.date}
 
-Respond with a category and a confidence level between 0 and 1. Make sure that the category is a short noun, like "Groceries" or "Transportation".
+You MUST choose one of the following predefined categories:
+${JSON.stringify(EXPENSE_CATEGORIES)}
 
 Return the category and confidence in JSON format. The category field should contain the category of the expense. The confidence field should be a number between 0 and 1 representing the confidence level. Only return a valid JSON object, no additional text.
 
 For example:
 {
-  "category": "Groceries",
+  "category": "Food",
   "confidence": 0.95
 }`;
 
@@ -55,7 +57,7 @@ For example:
   });
 
   const responseText = chatCompletion.choices[0]?.message?.content || '';
-  
+
   try {
     // Extract JSON from the response (handle potential markdown code blocks)
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -63,14 +65,17 @@ For example:
       throw new Error('No JSON found in response');
     }
     const result = JSON.parse(jsonMatch[0]) as CategorizeExpenseOutput;
+    const validCategory = (EXPENSE_CATEGORIES as readonly string[]).includes(result.category)
+      ? result.category
+      : 'Miscellaneous';
     return {
-      category: result.category || 'Uncategorized',
+      category: validCategory,
       confidence: typeof result.confidence === 'number' ? result.confidence : 0.5,
     };
   } catch (error) {
     console.error('Failed to parse AI response:', responseText, error);
     return {
-      category: 'Uncategorized',
+      category: 'Miscellaneous',
       confidence: 0,
     };
   }

@@ -29,7 +29,7 @@ export type Expense = z.infer<typeof expenseSchema>;
 export type ExpenseFormData = z.infer<typeof expenseFormSchema>;
 
 
-export type ProcessedReceiptData = Omit<ExtractReceiptDataOutput, 'vendorName' | 'totalAmount' | 'date'> & {
+export type ProcessedReceiptData = Omit<ExtractReceiptDataOutput, 'vendorName' | 'totalAmount' | 'date' | 'category'> & {
   vendorName: string;
   totalAmount: number;
   date: string;

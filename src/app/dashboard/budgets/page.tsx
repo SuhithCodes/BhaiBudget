@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { type Budget, type BudgetFormData } from '@/types';
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/hooks/use-toast';
-import { addBudget, getBudgets, deleteBudget, updateBudget } from '@/lib/actions/budgets';
+import { addBudget, deleteBudget, updateBudget } from '@/lib/actions/budgets';
 import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { type Expense } from '@/types';
@@ -29,24 +29,36 @@ export default function BudgetsPage() {
             return;
         }
 
-        const fetchBudgets = async () => {
-            try {
-                const userBudgets = await getBudgets(user.uid);
-                setBudgets(userBudgets);
-            } catch (error) {
+        let loadedCount = 0;
+        const checkLoaded = () => {
+            loadedCount++;
+            if (loadedCount >= 2) setIsLoading(false);
+        };
+
+        // Fix 5: Real-time listener for budgets (was previously one-shot getDocs)
+        const unsubscribeBudgets = onSnapshot(
+            query(collection(db, 'budgets'), where('userId', '==', user.uid)),
+            (snapshot) => {
+                const budgetsData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Budget));
+                setBudgets(budgetsData);
+                checkLoaded();
+            },
+            (error) => {
                 toast({
                     variant: 'destructive',
                     title: 'Error',
                     description: 'Could not fetch budgets.',
                 });
+                checkLoaded();
             }
-        };
+        );
 
         const unsubscribeExpenses = onSnapshot(
             query(collection(db, 'expenses'), where('userId', '==', user.uid), orderBy('date', 'desc')),
             (snapshot) => {
                 const expensesData = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Expense));
                 setExpenses(expensesData);
+                checkLoaded();
             },
             (error) => {
                 toast({
@@ -54,12 +66,12 @@ export default function BudgetsPage() {
                     title: 'Error',
                     description: 'Could not fetch expenses.',
                 });
+                checkLoaded();
             }
         );
 
-        Promise.all([fetchBudgets()]).finally(() => setIsLoading(false));
-
         return () => {
+            unsubscribeBudgets();
             unsubscribeExpenses();
         };
     }, [user, toast]);
@@ -74,27 +86,38 @@ export default function BudgetsPage() {
             return;
         }
 
+        // Fix 6: Prevent duplicate budgets (same category + period)
+        const duplicate = budgets.find(
+            (b) => b.category === newBudgetData.category && b.period === newBudgetData.period
+        );
+        if (duplicate) {
+            toast({
+                variant: 'destructive',
+                title: 'Duplicate Budget',
+                description: `A ${newBudgetData.period.toLowerCase()} budget for "${newBudgetData.category}" already exists ("${duplicate.name}"). Please edit the existing one instead.`,
+            });
+            return;
+        }
+
         try {
-            const newBudget = await addBudget(newBudgetData, user.uid);
-            setBudgets((prevBudgets) => [...prevBudgets, newBudget]);
+            await addBudget(newBudgetData, user.uid);
             setIsFormOpen(false);
             toast({
                 title: 'Budget Created',
-                description: `Your budget for "${newBudget.name}" has been created.`,
+                description: `Your budget for "${newBudgetData.name}" has been created.`,
             });
         } catch (error) {
-             toast({
+            toast({
                 variant: 'destructive',
                 title: 'Error',
                 description: 'Could not create budget.',
             });
         }
     };
-    
+
     const handleBudgetDeleted = async (budgetId: string) => {
         try {
             await deleteBudget(budgetId);
-            setBudgets((prevBudgets) => prevBudgets.filter((b) => b.id !== budgetId));
             toast({
                 title: 'Budget Deleted',
                 description: 'Your budget has been deleted.',
@@ -111,13 +134,6 @@ export default function BudgetsPage() {
     const handleBudgetUpdated = async (budgetId: string, budgetData: BudgetFormData) => {
         try {
             await updateBudget(budgetId, budgetData);
-            setBudgets((prevBudgets) =>
-                prevBudgets.map((budget) =>
-                    budget.id === budgetId
-                        ? { ...budget, ...budgetData }
-                        : budget
-                )
-            );
             toast({
                 title: 'Budget Updated',
                 description: `Your budget for "${budgetData.name}" has been updated.`,
@@ -160,9 +176,9 @@ export default function BudgetsPage() {
                             <Loader2 className="h-8 w-8 animate-spin text-primary" />
                         </div>
                     ) : (
-                        <BudgetList 
-                            budgets={budgets} 
-                            expenses={expenses} 
+                        <BudgetList
+                            budgets={budgets}
+                            expenses={expenses}
                             onBudgetDeleted={handleBudgetDeleted}
                             onBudgetUpdated={handleBudgetUpdated}
                         />
@@ -171,4 +187,4 @@ export default function BudgetsPage() {
             </Card>
         </main>
     );
-} 
+}

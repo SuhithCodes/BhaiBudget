@@ -15,8 +15,8 @@ const poppins = Poppins({
 import { ThemeProvider } from '@/components/theme-provider';
 
 export const metadata: Metadata = {
-  title: 'BhaiBudget',
-  description: 'Smart expense tracking for modern professionals.',
+  title: 'YABA - Yet Another Budgeting App',
+  description: 'Smart expense tracking for everyone.',
 };
 
 export default function RootLayout({

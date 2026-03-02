@@ -6,8 +6,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { type Income, type IncomeFormData, incomeFormSchema } from "@/types";
+import { INCOME_SOURCES } from "@/lib/constants";
 
 interface IncomeFormProps {
   onSubmit: (income: IncomeFormData) => void;
@@ -59,8 +61,22 @@ export function IncomeForm({ onSubmit, initialData }: IncomeFormProps) {
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="sourceName">Source</Label>
-          <Input id="sourceName" {...form.register("sourceName")} placeholder="e.g., Salary" />
+          <Label>Source</Label>
+          <Select
+            onValueChange={(value) => form.setValue('sourceName', value, { shouldValidate: true })}
+            value={form.watch('sourceName')}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select source" />
+            </SelectTrigger>
+            <SelectContent>
+              {INCOME_SOURCES.map((source) => (
+                <SelectItem key={source} value={source}>
+                  {source}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {form.formState.errors.sourceName && (
             <p className="text-sm text-destructive">{form.formState.errors.sourceName.message}</p>
           )}
@@ -99,4 +115,3 @@ export function IncomeForm({ onSubmit, initialData }: IncomeFormProps) {
     </form>
   );
 }
-

@@ -233,8 +233,8 @@ export function AuthenticationPage() {
       >
         <div className="flex flex-col justify-center items-center h-full p-12 text-center bg-black bg-opacity-50 text-white">
           <ReceiptText className="h-16 w-16 text-primary" />
-          <h1 className="mt-6 text-4xl font-bold">BhaiBudget</h1>
-          <p className="mt-4 text-lg">Smart expense tracking for modern professionals.</p>
+          <h1 className="mt-6 text-4xl font-bold">YABA</h1>
+          <p className="mt-4 text-lg">Yet Another Budgeting App - Smart expense tracking for everyone.</p>
           <div className="mt-8 flex justify-center gap-6">
             <Link href="https://www.linkedin.com/in/gsuhith" target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
               <Linkedin className="h-6 w-6" />

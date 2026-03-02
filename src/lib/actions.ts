@@ -19,7 +19,7 @@ export async function processReceipt(
     }
 
     if (!extractedData.vendorName || !extractedData.totalAmount || !extractedData.date) {
-        return { error: 'Failed to extract essential data from the receipt. Please try a clearer image.' };
+      return { error: 'Failed to extract essential data from the receipt. Please try a clearer image.' };
     }
 
     const categorizationInput = {

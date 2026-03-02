@@ -1,11 +1,13 @@
 import type { LucideProps } from 'lucide-react';
 import {
+  Banknote,
   Car,
   HeartPulse,
+  Home,
   Lightbulb,
-  Plane,
+  PiggyBank,
   ShoppingBag,
-  ShoppingCart,
+  Smile,
   Tag,
   Ticket,
   UtensilsCrossed,
@@ -23,22 +25,27 @@ export const CategoryIcon: FC<CategoryIconProps> = ({
   const normalizedCategory = category.toLowerCase().trim();
 
   switch (normalizedCategory) {
-    case 'food & drink':
-      return <UtensilsCrossed {...props} />;
-    case 'groceries':
-      return <ShoppingCart {...props} />;
-    case 'shopping':
-      return <ShoppingBag {...props} />;
+    case 'housing':
+      return <Home {...props} />;
     case 'transportation':
       return <Car {...props} />;
-    case 'travel':
-      return <Plane {...props} />;
+    case 'food':
+      return <UtensilsCrossed {...props} />;
     case 'utilities':
       return <Lightbulb {...props} />;
-    case 'health':
+    case 'healthcare':
       return <HeartPulse {...props} />;
+    case 'personal care':
+      return <Smile {...props} />;
     case 'entertainment':
       return <Ticket {...props} />;
+    case 'shopping':
+      return <ShoppingBag {...props} />;
+    case 'debt payments':
+      return <Banknote {...props} />;
+    case 'savings & investments':
+      return <PiggyBank {...props} />;
+    case 'miscellaneous':
     default:
       return <Tag {...props} />;
   }
