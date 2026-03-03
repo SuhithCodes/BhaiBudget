@@ -17,6 +17,9 @@ import { ThemeProvider } from '@/components/theme-provider';
 export const metadata: Metadata = {
   title: 'YABA - Yet Another Budgeting App',
   description: 'Smart expense tracking for everyone.',
+  icons: {
+    icon: '/logo.svg',
+  },
 };
 
 export default function RootLayout({

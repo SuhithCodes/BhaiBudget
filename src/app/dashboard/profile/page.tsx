@@ -14,76 +14,132 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/context/auth-context";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { getExpenses, deleteAllExpenses } from '@/lib/actions/expenses';
 import { deleteAllIncomes } from '@/lib/actions/incomes';
 import { saveAs } from 'file-saver';
-import { getSavingsGoals } from '@/lib/actions/savings-goals';
-import { getBudgets } from '@/lib/actions/budgets';
-import { marked } from 'marked';
-import html2pdf from 'html2pdf.js';
-import { endOfMonth, startOfMonth, format as formatDate } from 'date-fns';
+import { endOfMonth, startOfMonth, format as formatDate, subMonths, startOfYear, endOfYear, subDays, startOfWeek, endOfWeek, startOfQuarter, endOfQuarter } from 'date-fns';
+import { generateReport, type ReportData } from '@/ai/flows/generate-monthly-report';
+import { ReportPreview } from '@/components/report/report-preview';
+import { Loader2, FileText, Download, FileSpreadsheet, Sparkles, Mail, Send, Bell, BellRing } from 'lucide-react';
+import { requestNotificationPermission, getNotificationPermission } from '@/lib/push-notifications';
 import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-    AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
 interface UserPreferences {
-    emailNotifications: boolean;
-    pushNotifications: boolean;
-    monthlyReports: boolean;
+  emailNotifications: boolean;
+  pushNotifications: boolean;
+  monthlyReports: boolean;
 }
 
 export default function SettingsPage() {
-    const { user } = useAuth();
-    const { toast } = useToast();
-    const [preferences, setPreferences] = useState<UserPreferences>({
-        emailNotifications: false,
-        pushNotifications: false,
-        monthlyReports: false,
-    });
-    
-    useEffect(() => {
-        if (user) {
-            const prefDocRef = doc(db, 'userPreferences', user.uid);
-            getDoc(prefDocRef).then((docSnap) => {
-                if (docSnap.exists()) {
-                    setPreferences(docSnap.data() as UserPreferences);
-                }
-            });
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [preferences, setPreferences] = useState<UserPreferences>({
+    emailNotifications: false,
+    pushNotifications: false,
+    monthlyReports: false,
+  });
+  const [reportStartDate, setReportStartDate] = useState(
+    formatDate(startOfMonth(new Date()), 'yyyy-MM-dd')
+  );
+  const [reportEndDate, setReportEndDate] = useState(
+    formatDate(endOfMonth(new Date()), 'yyyy-MM-dd')
+  );
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [isDownloadingPDF, setIsDownloadingPDF] = useState(false);
+  const [reportData, setReportData] = useState<ReportData | null>(null);
+  const reportRef = useRef<HTMLDivElement>(null);
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+  useEffect(() => {
+    if (user) {
+      const prefDocRef = doc(db, 'userPreferences', user.uid);
+      getDoc(prefDocRef).then((docSnap) => {
+        if (docSnap.exists()) {
+          setPreferences(docSnap.data() as UserPreferences);
         }
-    }, [user]);
+      });
+    }
+  }, [user]);
 
-    const handlePreferenceChange = async (key: keyof UserPreferences, value: boolean) => {
-        if (!user) return;
-        
-        const newPreferences = { ...preferences, [key]: value };
-        setPreferences(newPreferences);
+  const handlePreferenceChange = async (key: keyof UserPreferences, value: boolean) => {
+    if (!user) return;
 
-        try {
-            const prefDocRef = doc(db, 'userPreferences', user.uid);
-            await setDoc(prefDocRef, newPreferences, { merge: true });
-            toast({ title: 'Preferences Updated' });
-        } catch (error) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not save preferences.' });
-        }
-    };
+    const newPreferences = { ...preferences, [key]: value };
+    setPreferences(newPreferences);
+
+    try {
+      const prefDocRef = doc(db, 'userPreferences', user.uid);
+      await setDoc(prefDocRef, newPreferences, { merge: true });
+      toast({ title: 'Preferences Updated' });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not save preferences.' });
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    if (!user?.email) {
+      toast({ variant: 'destructive', title: 'Error', description: 'No email address found.' });
+      return;
+    }
+    setSendingTestEmail(true);
+    try {
+      const res = await fetch('/api/notifications/send-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      toast({ title: 'Test Email Sent!', description: `Check your inbox at ${user.email}` });
+    } catch {
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not send test email. Check SMTP settings.' });
+    } finally {
+      setSendingTestEmail(false);
+    }
+  };
+
+  const handlePushToggle = async (value: boolean) => {
+    if (value) {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        toast({ variant: 'destructive', title: 'Permission Denied', description: 'Please allow notifications in your browser settings.' });
+        return;
+      }
+    }
+    handlePreferenceChange('pushNotifications', value);
+  };
+
+  const handleMonthlyReportsToggle = async (value: boolean) => {
+    if (value && user?.email) {
+      const prefDocRef = doc(db, 'userPreferences', user.uid);
+      await setDoc(prefDocRef, { monthlyReports: value, email: user.email }, { merge: true });
+      setPreferences((prev) => ({ ...prev, monthlyReports: value }));
+      toast({ title: 'Monthly Reports Enabled', description: `Reports will be sent to ${user.email} on the 1st of each month.` });
+    } else {
+      handlePreferenceChange('monthlyReports', value);
+    }
+  };
 
   const handleExportExpensesCSV = async () => {
     if (!user) return;
-    const expenses = await getExpenses(user.uid);
+    const allExpenses = await getExpenses(user.uid);
+    const expenses = allExpenses.filter(
+      (e) => e.date >= reportStartDate && e.date <= reportEndDate
+    );
     if (expenses.length === 0) {
-      toast({ title: 'No Data', description: 'There are no expenses to export.', variant: 'destructive' });
+      toast({ title: 'No Data', description: 'No expenses found in the selected date range.', variant: 'destructive' });
       return;
     }
     const headers = [
@@ -117,79 +173,69 @@ export default function SettingsPage() {
 
   const handleSummaryReport = async () => {
     if (!user) return;
+    setIsGeneratingReport(true);
+    setReportData(null);
+    try {
+      const data = await generateReport(user.uid, reportStartDate, reportEndDate);
+      setReportData(data);
+      toast({ title: 'Report Generated', description: 'Your AI financial summary is ready.' });
+    } catch (error) {
+      console.error('Report generation failed:', error);
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not generate report.' });
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!reportRef.current) return;
+    setIsDownloadingPDF(true);
+    try {
+      const html2pdf = (await import('html2pdf.js')).default;
+      await html2pdf().set({
+        margin: [10, 10, 10, 10],
+        filename: `YABA-Report-${reportStartDate}-to-${reportEndDate}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
+      }).from(reportRef.current).save();
+      toast({ title: 'PDF Downloaded' });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not download PDF.' });
+    } finally {
+      setIsDownloadingPDF(false);
+    }
+  };
+
+  const setDatePreset = (preset: string) => {
     const now = new Date();
-    const start = startOfMonth(now);
-    const end = endOfMonth(now);
-    const [expenses, goals, budgets] = await Promise.all([
-      getExpenses(user.uid),
-      getSavingsGoals(user.uid),
-      getBudgets(user.uid),
-    ]);
-    const monthExpenses = expenses.filter(e => e.date >= formatDate(start, 'yyyy-MM-dd') && e.date <= formatDate(end, 'yyyy-MM-dd'));
-    let md = `# 📊 **Monthly Financial Summary**\n\n`;
-    md += `---\n`;
-    md += `**Period:** _${formatDate(start, 'MMM dd, yyyy')} - ${formatDate(end, 'MMM dd, yyyy')}_\n\n`;
-    const totalSpent = monthExpenses.reduce((sum, e) => sum + e.totalAmount, 0);
-    md += `> **Total spent this month:** $${totalSpent.toFixed(2)}\n`;
-    md += `\n---\n`;
-    md += `## 🧾 Expenses (${monthExpenses.length})\n`;
-    if (monthExpenses.length === 0) {
-      md += '_No expenses recorded this month._\n';
-    } else {
-      md += '\n| Date | Vendor | Category | Amount |\n|:---:|:---|:---|---:|\n';
-      for (const e of monthExpenses) {
-        md += `| ${e.date} | ${e.vendorName} | ${e.category} | **$${e.totalAmount.toFixed(2)}** |\n`;
-      }
+    switch (preset) {
+      case 'thisMonth':
+        setReportStartDate(formatDate(startOfMonth(now), 'yyyy-MM-dd'));
+        setReportEndDate(formatDate(endOfMonth(now), 'yyyy-MM-dd'));
+        break;
+      case 'lastMonth':
+        const lm = subMonths(now, 1);
+        setReportStartDate(formatDate(startOfMonth(lm), 'yyyy-MM-dd'));
+        setReportEndDate(formatDate(endOfMonth(lm), 'yyyy-MM-dd'));
+        break;
+      case 'thisQuarter':
+        setReportStartDate(formatDate(startOfQuarter(now), 'yyyy-MM-dd'));
+        setReportEndDate(formatDate(endOfQuarter(now), 'yyyy-MM-dd'));
+        break;
+      case 'thisYear':
+        setReportStartDate(formatDate(startOfYear(now), 'yyyy-MM-dd'));
+        setReportEndDate(formatDate(endOfYear(now), 'yyyy-MM-dd'));
+        break;
+      case 'last7Days':
+        setReportStartDate(formatDate(subDays(now, 6), 'yyyy-MM-dd'));
+        setReportEndDate(formatDate(now, 'yyyy-MM-dd'));
+        break;
+      case 'last30Days':
+        setReportStartDate(formatDate(subDays(now, 29), 'yyyy-MM-dd'));
+        setReportEndDate(formatDate(now, 'yyyy-MM-dd'));
+        break;
     }
-    md += '\n---\n';
-    md += `## 🎯 Savings Goals\n`;
-    if (goals.length === 0) {
-      md += '_No savings goals._\n';
-    } else {
-      md += '\n| Name | Target | Current | Progress |\n|:---|---:|---:|---:|\n';
-      for (const g of goals) {
-        const progress = g.targetAmount > 0 ? (g.currentAmount / g.targetAmount) * 100 : 0;
-        md += `| ${g.name} | $${g.targetAmount.toFixed(2)} | $${g.currentAmount.toFixed(2)} | ${progress.toFixed(1)}% |\n`;
-      }
-    }
-    md += '\n---\n';
-    md += `## 💰 Budgets\n`;
-    if (budgets.length === 0) {
-      md += '_No budgets._\n';
-    } else {
-      md += '\n| Name | Category | Amount | Period |\n|:---|:---|---:|:---:|\n';
-      for (const b of budgets) {
-        md += `| ${b.name} | ${b.category} | $${b.amount.toFixed(2)} | ${b.period} |\n`;
-      }
-    }
-    md += '\n---\n';
-    md += `## 📈 Analytics\n`;
-    md += `- **Total spent:** $${totalSpent.toFixed(2)}\n`;
-    md += `- **Number of transactions:** ${monthExpenses.length}\n`;
-    md += `- **Number of savings goals:** ${goals.length}\n`;
-    md += `- **Number of budgets:** ${budgets.length}\n`;
-    const customCSS = `
-      <style>
-        body { font-family: 'Alegreya', serif; color: #222; background: #fff; }
-        h1, h2, h3 { color: #D9A829; font-family: 'Alegreya', serif; }
-        h1 { font-size: 2.2em; margin-bottom: 0.2em; }
-        h2 { font-size: 1.4em; margin-top: 1.5em; margin-bottom: 0.5em; }
-        h3 { font-size: 1.1em; margin-top: 1em; }
-        table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-        th, td { border: 1px solid #eee; padding: 0.5em 0.8em; text-align: left; }
-        th { background: #f5f4f0; color: #D97A29; font-weight: bold; }
-        tr:nth-child(even) { background: #faf8f3; }
-        tr:hover { background: #f5f4f0; }
-        .summary-box { background: #f5f4f0; border-left: 6px solid #D9A829; padding: 1em; margin-bottom: 1.5em; font-size: 1.1em; }
-        .section-divider { border: none; border-top: 2px solid #D9A829; margin: 2em 0 1em 0; }
-        .emoji { font-size: 1.3em; vertical-align: middle; margin-right: 0.3em; }
-        .analytics-list { margin: 0.5em 0 0 1em; }
-        .analytics-list li { margin-bottom: 0.2em; }
-      </style>
-    `;
-    const html = customCSS + marked.parse(md);
-    html2pdf().from(html).set({ filename: 'summary-report.pdf' }).save();
-    toast({ title: 'Summary Report Generated', description: 'Your summary report PDF is downloading.' });
   };
 
   const handleClearExpenses = async () => {
@@ -206,8 +252,8 @@ export default function SettingsPage() {
   const handleClearAllData = async () => {
     if (!user) return;
     const [expensesResult, incomesResult] = await Promise.all([
-        deleteAllExpenses(user.uid),
-        deleteAllIncomes(user.uid)
+      deleteAllExpenses(user.uid),
+      deleteAllIncomes(user.uid)
     ]);
 
     if (expensesResult.success && incomesResult.success) {
@@ -218,180 +264,326 @@ export default function SettingsPage() {
     }
   };
 
+  const initials = user?.displayName
+    ? user.displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+    : user?.email?.charAt(0).toUpperCase() || '?';
+
   return (
-    <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8 container mx-auto">
-      <h1 className="font-headline text-3xl font-semibold">Settings</h1>
+    <main className="flex flex-1 flex-col gap-6 p-4 md:gap-8 md:p-8 container mx-auto max-w-4xl">
+      {/* Page header with avatar */}
+      <div className="flex items-center gap-4">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-purple-700 text-white text-lg font-semibold shrink-0">
+          {initials}
+        </div>
+        <div>
+          <h1 className="font-headline text-2xl font-semibold tracking-tight">{user?.displayName || 'Your Account'}</h1>
+          <p className="text-sm text-muted-foreground">{user?.email}</p>
+        </div>
+      </div>
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full max-w-lg grid-cols-4 mb-6">
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="password">Password</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+        <TabsList className="w-full max-w-lg grid grid-cols-4 mb-4">
+          <TabsTrigger value="profile">Account</TabsTrigger>
+          <TabsTrigger value="password">Security</TabsTrigger>
+          <TabsTrigger value="notifications">Alerts</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
         </TabsList>
 
+        {/* ── Account ────────────────────────────────────────── */}
         <TabsContent value="profile">
-          <Card className="max-w-3xl">
+          <Card>
             <CardHeader>
-              <CardTitle>Personal Information</CardTitle>
-              <CardDescription>Update your personal details here.</CardDescription>
+              <CardTitle className="text-lg">Account Details</CardTitle>
+              <CardDescription>Your personal information tied to this account.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
-                <Input id="name" defaultValue={user?.displayName || ''} placeholder="Your name"/>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" value={user?.email || ''} disabled />
+            <CardContent className="space-y-5">
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Full Name</Label>
+                  <Input id="name" defaultValue={user?.displayName || ''} placeholder="Your name" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Email Address</Label>
+                  <Input id="email" type="email" value={user?.email || ''} disabled className="opacity-60" />
+                </div>
               </div>
             </CardContent>
-            <CardFooter>
-              <Button>Save Changes</Button>
+            <CardFooter className="border-t pt-4">
+              <Button size="sm">Save Changes</Button>
             </CardFooter>
           </Card>
         </TabsContent>
 
+        {/* ── Security ───────────────────────────────────────── */}
         <TabsContent value="password">
-          <Card className="max-w-3xl">
+          <Card>
             <CardHeader>
-              <CardTitle>Change Password</CardTitle>
-              <CardDescription>Update your password. Make sure it's a strong one.</CardDescription>
+              <CardTitle className="text-lg">Security</CardTitle>
+              <CardDescription>Update your password. Use a strong, unique password you don't use elsewhere.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="current-password">Current Password</Label>
+                <Label htmlFor="current-password" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Current Password</Label>
                 <Input id="current-password" type="password" />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="new-password">New Password</Label>
-                <Input id="new-password" type="password" />
-              </div>
-               <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirm New Password</Label>
-                <Input id="confirm-password" type="password" />
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="new-password" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">New Password</Label>
+                  <Input id="new-password" type="password" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Confirm Password</Label>
+                  <Input id="confirm-password" type="password" />
+                </div>
               </div>
             </CardContent>
-            <CardFooter>
-              <Button>Update Password</Button>
+            <CardFooter className="border-t pt-4">
+              <Button size="sm">Update Password</Button>
             </CardFooter>
           </Card>
         </TabsContent>
 
+        {/* ── Notifications ──────────────────────────────────── */}
         <TabsContent value="notifications">
-           <Card className="max-w-3xl">
+          <Card>
             <CardHeader>
-              <CardTitle>Notifications</CardTitle>
-              <CardDescription>Manage your notification preferences.</CardDescription>
+              <CardTitle className="text-lg">Notification Preferences</CardTitle>
+              <CardDescription>Configure how and when YABA communicates with you.</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-6">
-                <div className="flex items-center justify-between space-x-2">
-                    <Label htmlFor="email-notifications" className="flex flex-col space-y-1 cursor-pointer">
-                        <span>Email Notifications</span>
-                        <span className="font-normal leading-snug text-muted-foreground">
-                        Receive summaries and alerts.
-                        </span>
-                    </Label>
-                    <Switch 
-                        id="email-notifications" 
-                        checked={preferences.emailNotifications}
-                        onCheckedChange={(value) => handlePreferenceChange('emailNotifications', value)}
-                    />
+            <CardContent className="space-y-4">
+
+              {/* Email Notifications */}
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-md bg-violet-500/10">
+                      <Mail className="h-4 w-4 text-violet-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium leading-none">Email Alerts</p>
+                      <p className="text-xs text-muted-foreground mt-1">Budget warnings and spending alerts via email</p>
+                    </div>
+                  </div>
+                  <Switch
+                    id="email-notifications"
+                    checked={preferences.emailNotifications}
+                    onCheckedChange={(value) => handlePreferenceChange('emailNotifications', value)}
+                  />
                 </div>
-                 <div className="flex items-center justify-between space-x-2">
-                    <Label htmlFor="push-notifications" className="flex flex-col space-y-1 cursor-pointer">
-                        <span>Push Notifications</span>
-                        <span className="font-normal leading-snug text-muted-foreground">
-                        Get real-time alerts on your devices.
-                        </span>
-                    </Label>
-                    <Switch 
-                        id="push-notifications" 
-                        checked={preferences.pushNotifications}
-                        onCheckedChange={(value) => handlePreferenceChange('pushNotifications', value)}
-                    />
+                {preferences.emailNotifications && (
+                  <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2.5">
+                    <p className="text-xs text-muted-foreground">
+                      Delivering to <span className="font-medium text-foreground">{user?.email}</span>
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={handleSendTestEmail}
+                      disabled={sendingTestEmail}
+                    >
+                      {sendingTestEmail ? (
+                        <><Loader2 className="mr-1.5 h-3 w-3 animate-spin" />Sending</>
+                      ) : (
+                        <><Send className="mr-1.5 h-3 w-3" />Verify</>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* Push Notifications */}
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-md bg-blue-500/10">
+                      <Bell className="h-4 w-4 text-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium leading-none">Push Notifications</p>
+                      <p className="text-xs text-muted-foreground mt-1">Real-time browser alerts for transactions and budget limits</p>
+                    </div>
+                  </div>
+                  <Switch
+                    id="push-notifications"
+                    checked={preferences.pushNotifications}
+                    onCheckedChange={handlePushToggle}
+                  />
                 </div>
-                 <div className="flex items-center justify-between space-x-2">
-                    <Label htmlFor="monthly-reports" className="flex flex-col space-y-1 cursor-pointer">
-                        <span>Monthly Reports</span>
-                        <span className="font-normal leading-snug text-muted-foreground">
-                        Get a PDF report each month.
-                        </span>
-                    </Label>
-                    <Switch 
-                        id="monthly-reports" 
-                        checked={preferences.monthlyReports}
-                        onCheckedChange={(value) => handlePreferenceChange('monthlyReports', value)}
-                    />
+                {preferences.pushNotifications && (
+                  <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2.5">
+                    <div className={`h-1.5 w-1.5 rounded-full ${typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    <p className="text-xs text-muted-foreground">
+                      {typeof window !== 'undefined' && 'Notification' in window
+                        ? Notification.permission === 'granted'
+                          ? 'Permission granted — notifications active'
+                          : Notification.permission === 'denied'
+                            ? 'Permission blocked — update in browser settings'
+                            : 'Awaiting permission'
+                        : 'Not supported in this browser'}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Monthly Reports */}
+              <div className="rounded-lg border p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-500/10">
+                      <FileText className="h-4 w-4 text-emerald-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium leading-none">Monthly Summary</p>
+                      <p className="text-xs text-muted-foreground mt-1">AI-generated financial report delivered on the 1st of each month</p>
+                    </div>
+                  </div>
+                  <Switch
+                    id="monthly-reports"
+                    checked={preferences.monthlyReports}
+                    onCheckedChange={handleMonthlyReportsToggle}
+                  />
                 </div>
+                {preferences.monthlyReports && (
+                  <div className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    <p className="text-xs text-muted-foreground">
+                      Scheduled for <span className="font-medium text-foreground">{user?.email}</span> — 1st of every month, 9:00 AM UTC
+                    </p>
+                  </div>
+                )}
+              </div>
+
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* ── Data & Reports ─────────────────────────────────── */}
         <TabsContent value="data">
-          <Card className="max-w-3xl">
+          <Card>
             <CardHeader>
-              <CardTitle>Data & Reports</CardTitle>
-              <CardDescription>Export your data or generate a monthly summary report.</CardDescription>
+              <CardTitle className="text-lg">Data & Reports</CardTitle>
+              <CardDescription>Select a date range, then export your data or generate an AI-powered summary.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <Button variant="outline" className="w-full" onClick={handleExportExpensesCSV}>
-                Expenses Report (CSV)
-              </Button>
-              <Button className="w-full" onClick={handleSummaryReport}>
-                Summary Report (AI PDF)
-              </Button>
+            <CardContent className="space-y-5">
+              {/* Date range */}
+              <div className="rounded-lg border p-4 space-y-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Date Range</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="report-start" className="text-xs text-muted-foreground">From</Label>
+                    <Input id="report-start" type="date" value={reportStartDate} onChange={(e) => setReportStartDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="report-end" className="text-xs text-muted-foreground">To</Label>
+                    <Input id="report-end" type="date" value={reportEndDate} onChange={(e) => setReportEndDate(e.target.value)} />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    ['This Month', 'thisMonth'],
+                    ['Last Month', 'lastMonth'],
+                    ['7 Days', 'last7Days'],
+                    ['30 Days', 'last30Days'],
+                    ['Quarter', 'thisQuarter'],
+                    ['Year', 'thisYear'],
+                  ].map(([label, key]) => (
+                    <Button key={key} variant="outline" size="sm" className="h-7 text-xs px-2.5" onClick={() => setDatePreset(key)}>
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Button variant="outline" onClick={handleExportExpensesCSV} className="justify-center">
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Export CSV
+                </Button>
+                <Button onClick={handleSummaryReport} disabled={isGeneratingReport} className="justify-center">
+                  {isGeneratingReport ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating...</>
+                  ) : (
+                    <><Sparkles className="mr-2 h-4 w-4" />AI Summary Report</>
+                  )}
+                </Button>
+              </div>
+
+              {/* Report Preview */}
+              {reportData && (
+                <div className="space-y-3 pt-4 border-t">
+                  <div className="flex justify-end">
+                    <Button variant="outline" size="sm" onClick={handleDownloadPDF} disabled={isDownloadingPDF}>
+                      {isDownloadingPDF ? (
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Preparing...</>
+                      ) : (
+                        <><Download className="mr-2 h-4 w-4" />Download PDF</>
+                      )}
+                    </Button>
+                  </div>
+                  <div className="rounded-lg border overflow-hidden">
+                    <ReportPreview ref={reportRef} data={reportData} />
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
-          <Card className="max-w-3xl mt-6 border-destructive">
-            <CardHeader>
-                <CardTitle className="text-destructive">Danger Zone</CardTitle>
-                <CardDescription>These actions are permanent and cannot be undone.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="destructive" className="w-full">
-                            Clear All Expenses
-                        </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete all of your **expense** data.
-                        </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleClearExpenses}>
-                            Continue
-                        </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
 
+          {/* Danger Zone */}
+          <Card className="mt-6 border-destructive/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base text-destructive">Danger Zone</CardTitle>
+              <CardDescription>Irreversible actions. Proceed with caution.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between rounded-lg border border-destructive/20 p-3">
+                <div>
+                  <p className="text-sm font-medium">Clear Expenses</p>
+                  <p className="text-xs text-muted-foreground">Permanently delete all expense records</p>
+                </div>
                 <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="destructive" className="w-full">
-                            Clear All Data (Expenses & Incomes)
-                        </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete all of your **expense and income** data.
-                        </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleClearAllData}>
-                            Continue
-                        </AlertDialogAction>
-                        </AlertDialogFooter>
-                    </AlertDialogContent>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm">Clear</Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete all expenses?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action is permanent and cannot be reversed. All expense records will be deleted.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleClearExpenses}>Delete</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
                 </AlertDialog>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border border-destructive/20 p-3">
+                <div>
+                  <p className="text-sm font-medium">Clear All Data</p>
+                  <p className="text-xs text-muted-foreground">Permanently delete all expenses and income records</p>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm">Clear All</Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete all financial data?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action is permanent and cannot be reversed. All expense and income records will be deleted.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleClearAllData}>Delete Everything</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

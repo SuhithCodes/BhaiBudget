@@ -34,12 +34,15 @@ import { deleteExpense, updateExpense } from "@/lib/actions/expenses"
 import { IncomeForm } from "@/components/income/income-form"
 import { type IncomeFormData, type Income } from "@/types"
 import { useToast } from "@/hooks/use-toast"
+import { checkBudgetAlerts } from "@/lib/check-budget-alerts"
+import { getBudgets } from "@/lib/actions/budgets"
+import { notifyExpenseAdded, notifyIncomeAdded, notifyBudgetExceeded } from "@/lib/push-notifications"
 import { DateRange } from "react-day-picker"
 import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfQuarter, endOfQuarter, startOfDay, endOfDay } from "date-fns"
 import { DatePickerWithRange } from "@/components/ui/date-range-picker"
 import { ResponsiveSankey } from "@/components/dashboard/responsive-sankey"
 import { PARENT_CATEGORIES as PARENT_CATEGORIES_CONST } from "@/lib/constants"
-import { VoiceTransactionAgent } from "@/components/voice/voice-transaction-agent"
+
 
 export default function DashboardPage() {
     const { user } = useAuth();
@@ -105,6 +108,37 @@ export default function DashboardPage() {
             const expenseWithUser = { ...newExpenseData, userId: user.uid };
             await addDoc(collection(db, "expenses"), expenseWithUser);
             setIsFormOpen(false);
+
+            // Push notification
+            notifyExpenseAdded(newExpenseData.vendorName, newExpenseData.totalAmount);
+
+            // Check budget alerts (fire-and-forget)
+            if (user.email) {
+                getBudgets(user.uid).then((budgets) => {
+                    const allExpensesWithNew = [...expenses, newExpenseData as Expense];
+
+                    // Check for exceeded budgets and send push + email
+                    const matchingBudgets = budgets.filter(
+                        (b) => b.category.toLowerCase() === newExpenseData.category.toLowerCase(),
+                    );
+                    const totalInCategory = allExpensesWithNew
+                        .filter((e) => e.category.toLowerCase() === newExpenseData.category.toLowerCase())
+                        .reduce((sum, e) => sum + e.totalAmount, 0);
+                    for (const budget of matchingBudgets) {
+                        if (totalInCategory > budget.amount) {
+                            notifyBudgetExceeded(budget.name, totalInCategory, budget.amount);
+                        }
+                    }
+
+                    checkBudgetAlerts(
+                        user.uid,
+                        user.email!,
+                        newExpenseData.category,
+                        allExpensesWithNew,
+                        budgets,
+                    );
+                }).catch(() => { });
+            }
         } catch (error) {
             console.error("Error adding expense: ", error);
         }
@@ -116,6 +150,9 @@ export default function DashboardPage() {
             const incomeWithUser = { ...newIncomeData, userId: user.uid };
             await addDoc(collection(db, "incomes"), incomeWithUser);
             setIsIncomeFormOpen(false);
+
+            // Push notification
+            notifyIncomeAdded(newIncomeData.sourceName, newIncomeData.amount);
         } catch (error) {
             console.error("Error adding income: ", error);
         }
@@ -312,7 +349,7 @@ export default function DashboardPage() {
 
     if (isLoading) {
         return (
-            <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8 container mx-auto">
+            <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8 w-full max-w-screen-2xl">
                 <div className="flex items-center justify-between">
                     <Skeleton className="h-10 w-48" />
                     <Skeleton className="h-10 w-36" />
@@ -333,97 +370,115 @@ export default function DashboardPage() {
     }
 
     return (
-        <>
-            <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8 container mx-auto">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                    <h1 className="font-headline text-3xl font-semibold">Dashboard</h1>
-                    <div className="flex items-center gap-2">
-                        <Dialog open={isIncomeFormOpen} onOpenChange={setIsIncomeFormOpen}>
-                            <DialogTrigger asChild>
-                                <Button variant="outline">
-                                    <Banknote className="mr-2 h-4 w-4" />
-                                    Add Income
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent className="max-h-[95vh] overflow-y-auto p-4 sm:p-6">
-                                <DialogHeader className="mb-4">
-                                    <DialogTitle>Add New Income</DialogTitle>
-                                    <DialogDescription>
-                                        Record money you received.
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <IncomeForm onSubmit={handleIncomeAdded} />
-                            </DialogContent>
-                        </Dialog>
-                        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-                            <DialogTrigger asChild>
-                                <Button>
-                                    <PlusCircle className="mr-2 h-4 w-4" />
-                                    Add Expense
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent className="max-h-[95vh] overflow-y-auto p-4 sm:p-6">
-                                <DialogHeader className="mb-4">
-                                    <DialogTitle>Add New Expense</DialogTitle>
-                                    <DialogDescription>
-                                        Upload or scan a receipt to automatically extract expense details.
-                                    </DialogDescription>
-                                </DialogHeader>
-                                <ExpenseForm onSubmit={handleExpenseAdded} />
-                            </DialogContent>
-                        </Dialog>
-                    </div>
+        <main className="flex flex-1 flex-col gap-6 p-4 md:gap-8 md:p-8 w-full max-w-screen-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="font-headline text-2xl font-semibold tracking-tight">Dashboard</h1>
+                    <p className="text-sm text-muted-foreground mt-1">Overview of your financial flows and spending habits.</p>
                 </div>
-                <div className="grid gap-8">
-                    <div className="flex flex-wrap items-center gap-2">
-                        <DatePickerWithRange date={dateRange} setDate={setDateRange} />
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="flex items-center gap-2">
-                                    <span>Presets</span>
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onSelect={() => setDatePreset('today')}>Today</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => setDatePreset('yesterday')}>Yesterday</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => setDatePreset('thisWeek')}>This Week</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => setDatePreset('lastWeek')}>Last Week</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => setDatePreset('last7Days')}>Last 7 Days</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => setDatePreset('thisMonth')}>This Month</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => setDatePreset('thisQuarter')}>This Quarter</DropdownMenuItem>
-                                <DropdownMenuItem onSelect={() => setDatePreset('thisYear')}>This Year</DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
-                    <DashboardSummary expenses={filteredExpenses} incomes={filteredIncomes} />
-                    <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">
-                        <div className="lg:col-span-3">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Financial Flow</CardTitle>
-                                </CardHeader>
-                                <CardContent className="h-[400px] w-full p-0">
-                                    {sankeyData.nodes.length > 1 && sankeyData.links.length > 0 ? (
+                <div className="flex items-center gap-2">
+                    <Dialog open={isIncomeFormOpen} onOpenChange={setIsIncomeFormOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="h-9">
+                                <Banknote className="mr-2 h-3.5 w-3.5" />
+                                Add Income
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-h-[95vh] overflow-y-auto p-4 sm:p-6">
+                            <DialogHeader className="mb-4">
+                                <DialogTitle>Add New Income</DialogTitle>
+                                <DialogDescription className="text-xs">
+                                    Record money you received to track your total earnings.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <IncomeForm onSubmit={handleIncomeAdded} />
+                        </DialogContent>
+                    </Dialog>
+                    <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+                        <DialogTrigger asChild>
+                            <Button size="sm" className="h-9">
+                                <PlusCircle className="mr-2 h-3.5 w-3.5" />
+                                Add Expense
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-h-[95vh] overflow-y-auto p-4 sm:p-6">
+                            <DialogHeader className="mb-4">
+                                <DialogTitle>Add New Expense</DialogTitle>
+                                <DialogDescription className="text-xs">
+                                    Scan a receipt or enter details manually to track your spending.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <ExpenseForm onSubmit={handleExpenseAdded} />
+                        </DialogContent>
+                    </Dialog>
+                </div>
+            </div>
+
+            <div className="grid gap-6">
+                {/* Filters */}
+                <div className="flex flex-wrap items-center gap-2 bg-muted/30 p-2 rounded-lg border border-transparent hover:border-muted-foreground/10 transition-colors">
+                    <DatePickerWithRange date={dateRange} setDate={setDateRange} />
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 text-xs font-medium text-muted-foreground hover:text-foreground">
+                                <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+                                Quick Presets
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-48">
+                            <DropdownMenuLabel className="text-[10px] uppercase text-muted-foreground font-semibold py-1.5">Date Range Presets</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-sm cursor-pointer" onSelect={() => setDatePreset('today')}>Today</DropdownMenuItem>
+                            <DropdownMenuItem className="text-sm cursor-pointer" onSelect={() => setDatePreset('yesterday')}>Yesterday</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-sm cursor-pointer" onSelect={() => setDatePreset('thisWeek')}>This Week</DropdownMenuItem>
+                            <DropdownMenuItem className="text-sm cursor-pointer" onSelect={() => setDatePreset('lastWeek')}>Last Week</DropdownMenuItem>
+                            <DropdownMenuItem className="text-sm cursor-pointer" onSelect={() => setDatePreset('last7Days')}>Last 7 Days</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-sm cursor-pointer font-medium" onSelect={() => setDatePreset('thisMonth')}>This Month</DropdownMenuItem>
+                            <DropdownMenuItem className="text-sm cursor-pointer" onSelect={() => setDatePreset('thisQuarter')}>This Quarter</DropdownMenuItem>
+                            <DropdownMenuItem className="text-sm cursor-pointer" onSelect={() => setDatePreset('thisYear')}>This Year</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+
+                <DashboardSummary expenses={filteredExpenses} incomes={filteredIncomes} />
+
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+                    <div className="lg:col-span-3">
+                        <Card className="h-full overflow-hidden">
+                            <CardHeader className="border-b pb-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <CardTitle className="text-lg">Financial Flow</CardTitle>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Sankey diagram of income vs allocation.</p>
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="h-[430px] w-full p-0">
+                                {sankeyData.nodes.length > 1 && sankeyData.links.length > 0 ? (
+                                    <div className="h-full">
                                         <ResponsiveSankey data={sankeyData} height={400} />
-                                    ) : (
-                                        <div className="flex items-center justify-center h-full text-muted-foreground">
-                                            <p className="text-center">No data for this period. <br /> Try adjusting the date filter.</p>
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
-                        </div>
-                        <div className="lg:col-span-2">
-                            <ExpenseList
-                                expenses={recentExpenses}
-                                onExpenseDeleted={handleExpenseDeleted}
-                                onExpenseUpdated={handleExpenseUpdated}
-                            />
-                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground bg-muted/5">
+                                        <p className="text-center text-sm font-medium">Insufficient data for visualization.</p>
+                                        <p className="text-center text-[11px] mt-1">Add both balance and expenses to see the flow.</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+                    <div className="lg:col-span-2">
+                        <ExpenseList
+                            expenses={recentExpenses}
+                            onExpenseDeleted={handleExpenseDeleted}
+                            onExpenseUpdated={handleExpenseUpdated}
+                        />
                     </div>
                 </div>
-            </main>
-            <VoiceTransactionAgent />
-        </>
+            </div>
+        </main>
     )
 }
+

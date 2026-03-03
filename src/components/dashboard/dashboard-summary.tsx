@@ -1,6 +1,6 @@
 "use client"
 
-import { DollarSign, ReceiptText, Tags, TrendingUp, TrendingDown, Wallet } from "lucide-react"
+import { ReceiptText, TrendingUp, TrendingDown, Wallet } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { type Expense, type Income } from "@/types"
 import Link from "next/link"
@@ -25,61 +25,78 @@ export function DashboardSummary({ expenses, incomes = [] }: DashboardSummaryPro
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      <Card>
+      {/* Income Card */}
+      <Card className="overflow-hidden relative">
+        <div className="absolute top-0 right-0 p-3 opacity-10">
+          <TrendingUp className="h-16 w-16 text-emerald-500" />
+        </div>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Income</CardTitle>
-          <TrendingUp className="h-4 w-4 text-emerald-500" />
+          <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Total Income</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+          <div className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
             {formatCurrency(totalIncome)}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {totalIncomes} transaction{totalIncomes !== 1 ? 's' : ''} in period
+          <p className="text-[10px] font-medium text-muted-foreground mt-1 flex items-center gap-1">
+            <span className="text-emerald-500">{totalIncomes}</span> payments this period
           </p>
         </CardContent>
       </Card>
-      <Card>
+
+      {/* Spending Card */}
+      <Card className="overflow-hidden relative">
+        <div className="absolute top-0 right-0 p-3 opacity-10">
+          <TrendingDown className="h-16 w-16 text-red-500" />
+        </div>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Spending</CardTitle>
-          <TrendingDown className="h-4 w-4 text-red-500" />
+          <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Total Spending</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+          <div className="text-2xl font-bold tracking-tight text-red-600 dark:text-red-400">
             {formatCurrency(totalSpending)}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {totalExpenses} expense{totalExpenses !== 1 ? 's' : ''} in period
+          <p className="text-[10px] font-medium text-muted-foreground mt-1 flex items-center gap-1">
+            <span className="text-red-500">{totalExpenses}</span> expenses this period
           </p>
         </CardContent>
       </Card>
-      <Card>
+
+      {/* Net Balance Card */}
+      <Card className="overflow-hidden relative">
+        <div className="absolute top-0 right-0 p-3 opacity-10">
+          <Wallet className="h-16 w-16 text-muted-foreground" />
+        </div>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Net Balance</CardTitle>
-          <Wallet className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Net Balance</CardTitle>
         </CardHeader>
         <CardContent>
           <div className={cn(
-            "text-2xl font-bold",
+            "text-2xl font-bold tracking-tight",
             netBalance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
           )}>
             {formatCurrency(netBalance)}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {netBalance >= 0 ? 'Surplus' : 'Deficit'} for this period
+          <p className="text-[10px] font-medium text-muted-foreground mt-1 flex items-center gap-1">
+            <span className={netBalance >= 0 ? "text-emerald-500" : "text-red-500"}>
+              {netBalance >= 0 ? 'Surplus' : 'Deficit'}
+            </span> relative to income
           </p>
         </CardContent>
       </Card>
-      <Link href="/dashboard/transactions">
-        <Card className="hover:bg-muted/50 transition-colors h-full">
+
+      {/* Transactions Card */}
+      <Link href="/dashboard/transactions" className="block h-full group">
+        <Card className="hover:border-primary/50 transition-all active:scale-[0.98] h-full overflow-hidden relative border-dashed">
+          <div className="absolute top-0 right-0 p-3 opacity-10">
+            <ReceiptText className="h-16 w-16 transition-transform group-hover:scale-110" />
+          </div>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Transactions</CardTitle>
-            <ReceiptText className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Transactions</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalTransactions}</div>
-            <p className="text-xs text-muted-foreground">
-              {uniqueCategories} categor{uniqueCategories !== 1 ? 'ies' : 'y'}
+            <div className="text-2xl font-bold tracking-tight group-hover:text-primary transition-colors">{totalTransactions}</div>
+            <p className="text-[10px] font-medium text-muted-foreground mt-1">
+              Across <span className="font-semibold">{uniqueCategories}</span> categories
             </p>
           </CardContent>
         </Card>
@@ -87,3 +104,4 @@ export function DashboardSummary({ expenses, incomes = [] }: DashboardSummaryPro
     </div>
   )
 }
+

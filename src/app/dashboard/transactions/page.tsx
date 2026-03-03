@@ -76,10 +76,10 @@ export default function TransactionsPage() {
     const filteredExpenses = useMemo(() => {
         return expenses.filter(expense => {
             const expenseDate = parseISO(expense.date);
-            
+
             const matchesCategory = selectedCategory === "all" || expense.category === selectedCategory;
             const matchesSearch = expense.vendorName.toLowerCase().includes(searchQuery.toLowerCase());
-            
+
             const expenseMonth = format(expenseDate, 'yyyy-MM');
             const matchesMonth = selectedMonth === 'all' || expenseMonth === selectedMonth;
 
@@ -92,9 +92,9 @@ export default function TransactionsPage() {
     const filteredIncomes = useMemo(() => {
         return incomes.filter(income => {
             const incomeDate = parseISO(income.date);
-            
+
             const matchesSearch = income.sourceName.toLowerCase().includes(searchQuery.toLowerCase());
-            
+
             const incomeMonth = format(incomeDate, 'yyyy-MM');
             const matchesMonth = selectedMonth === 'all' || incomeMonth === selectedMonth;
 
@@ -125,24 +125,28 @@ export default function TransactionsPage() {
     };
 
     return (
-        <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-8 container mx-auto">
-            <h1 className="font-headline text-3xl font-semibold">All Transactions</h1>
+        <main className="flex flex-1 flex-col gap-6 p-4 md:gap-8 md:p-8 w-full max-w-screen-2xl">
+            <div>
+                <h1 className="font-headline text-2xl font-semibold tracking-tight">Transactions</h1>
+                <p className="text-sm text-muted-foreground mt-1">View and filter all your expenses and income.</p>
+            </div>
 
             <Card>
-                <CardHeader>
-                    <div className="grid gap-4 md:grid-cols-4">
-                         <div className="relative">
+                {/* Filter bar */}
+                <CardHeader className="border-b pb-4">
+                    <div className="grid gap-3 md:grid-cols-4">
+                        <div className="relative">
                             <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Search by vendor..."
-                                className="pl-9"
+                                placeholder="Search..."
+                                className="pl-9 h-9"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
                         </div>
                         <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Filter by category" />
+                            <SelectTrigger className="h-9">
+                                <SelectValue placeholder="Category" />
                             </SelectTrigger>
                             <SelectContent>
                                 {uniqueCategories.map(category => (
@@ -153,8 +157,8 @@ export default function TransactionsPage() {
                             </SelectContent>
                         </Select>
                         <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Filter by month" />
+                            <SelectTrigger className="h-9">
+                                <SelectValue placeholder="Month" />
                             </SelectTrigger>
                             <SelectContent>
                                 {availableMonths.map(month => (
@@ -166,16 +170,16 @@ export default function TransactionsPage() {
                         </Select>
                         <Popover>
                             <PopoverTrigger asChild>
-                                <Button variant={"outline"} className="w-full justify-start text-left font-normal">
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                <Button variant={"outline"} className="h-9 w-full justify-start text-left font-normal text-sm">
+                                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
                                     {dateRange?.from ? (
                                         dateRange.to ? (
-                                            `${format(dateRange.from, "LLL dd, y")} - ${format(dateRange.to, "LLL dd, y")}`
+                                            `${format(dateRange.from, "LLL dd")} – ${format(dateRange.to, "LLL dd, y")}`
                                         ) : (
                                             format(dateRange.from, "LLL dd, y")
                                         )
                                     ) : (
-                                        <span>Pick a date range</span>
+                                        <span className="text-muted-foreground">Date range</span>
                                     )}
                                 </Button>
                             </PopoverTrigger>
@@ -190,28 +194,29 @@ export default function TransactionsPage() {
                         </Popover>
                     </div>
                 </CardHeader>
-                <CardContent>
+
+                <CardContent className="pt-4">
                     {isLoading ? (
-                        <div className="flex justify-center items-center h-64">
+                        <div className="flex justify-center items-center h-48">
                             <Loader2 className="h-8 w-8 animate-spin text-primary" />
                         </div>
                     ) : (
                         <Tabs defaultValue="expenses">
-                            <TabsList>
-                                <TabsTrigger value="expenses">Expenses</TabsTrigger>
-                                <TabsTrigger value="incomes">Incomes</TabsTrigger>
+                            <TabsList className="mb-2">
+                                <TabsTrigger value="expenses">Expenses ({filteredExpenses.length})</TabsTrigger>
+                                <TabsTrigger value="incomes">Income ({filteredIncomes.length})</TabsTrigger>
                             </TabsList>
                             <TabsContent value="expenses">
-                                <ExpenseList 
-                                    expenses={filteredExpenses} 
-                                    showTitle={false} 
-                                    showExport={true} 
+                                <ExpenseList
+                                    expenses={filteredExpenses}
+                                    showTitle={false}
+                                    showExport={true}
                                     onExpenseDeleted={handleExpenseDeleted}
                                     onExpenseUpdated={handleExpenseUpdated}
                                 />
                             </TabsContent>
                             <TabsContent value="incomes">
-                                <IncomeList 
+                                <IncomeList
                                     incomes={filteredIncomes}
                                     showTitle={false}
                                     showExport={true}

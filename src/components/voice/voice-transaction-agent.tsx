@@ -11,12 +11,21 @@ import { db } from "@/lib/firebase";
 import { collection, addDoc } from "firebase/firestore";
 import { cn } from "@/lib/utils";
 
-type AgentState = "idle" | "recording" | "processing" | "confirming" | "no-result";
+export type AgentState = "idle" | "recording" | "processing" | "confirming" | "no-result";
 
-export function VoiceTransactionAgent() {
+interface VoiceTransactionAgentProps {
+    onStateChange?: (state: AgentState) => void;
+    onMicClickRef?: React.MutableRefObject<(() => void) | null>;
+}
+
+export function VoiceTransactionAgent({ onStateChange, onMicClickRef }: VoiceTransactionAgentProps) {
     const { user } = useAuth();
     const { toast } = useToast();
-    const [state, setState] = useState<AgentState>("idle");
+    const [state, _setState] = useState<AgentState>("idle");
+    const setState = (newState: AgentState) => {
+        _setState(newState);
+        onStateChange?.(newState);
+    };
     const [result, setResult] = useState<VoiceTransactionResult | null>(null);
     const [error, setError] = useState<string | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -161,13 +170,18 @@ export function VoiceTransactionAgent() {
         }
     };
 
-    const handleMicClick = () => {
+    const handleMicClick = useCallback(() => {
         if (state === "recording") {
             stopRecording();
         } else if (state === "idle" || state === "no-result") {
             startRecording();
         }
-    };
+    }, [state, stopRecording, startRecording]);
+
+    // Expose handleMicClick to parent via ref
+    if (onMicClickRef) {
+        onMicClickRef.current = handleMicClick;
+    }
 
     const renderTransaction = (tx: ParsedTransaction, index: number) => {
         if (tx.type === "expense" && tx.expense) {
@@ -231,7 +245,7 @@ export function VoiceTransactionAgent() {
         <>
             {/* Confirmation Card with multiple transactions */}
             {state === "confirming" && result && result.transactions.length > 0 && (
-                <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div className="fixed inset-0 bg-black/50" onClick={handleCancel} />
                     <Card className="relative z-10 w-full max-w-md animate-in slide-in-from-bottom-4 duration-300 max-h-[80vh] flex flex-col">
                         <CardHeader className="pb-3">
@@ -264,7 +278,7 @@ export function VoiceTransactionAgent() {
 
             {/* No transaction detected */}
             {state === "no-result" && result && (
-                <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div className="fixed inset-0 bg-black/50" onClick={handleCancel} />
                     <Card className="relative z-10 w-full max-w-md animate-in slide-in-from-bottom-4 duration-300">
                         <CardHeader className="pb-3">
@@ -331,7 +345,7 @@ export function VoiceTransactionAgent() {
                 disabled={state === "processing" || state === "confirming"}
                 size="icon"
                 className={cn(
-                    "fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full shadow-xl transition-all",
+                    "fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full shadow-xl transition-all hidden md:flex",
                     "hover:scale-105 active:scale-95",
                     "ring-2 ring-white/20",
                     state === "recording"
