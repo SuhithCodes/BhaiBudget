@@ -178,7 +178,7 @@ export default function SettingsPage() {
     try {
       const data = await generateReport(user.uid, reportStartDate, reportEndDate);
       setReportData(data);
-      toast({ title: 'Report Generated', description: 'Your AI financial summary is ready.' });
+      toast({ title: 'Report Generated', description: 'Your unified AI financial summary is ready.' });
     } catch (error) {
       console.error('Report generation failed:', error);
       toast({ variant: 'destructive', title: 'Error', description: 'Could not generate report.' });
@@ -194,7 +194,7 @@ export default function SettingsPage() {
       const html2pdf = (await import('html2pdf.js')).default;
       await html2pdf().set({
         margin: [10, 10, 10, 10],
-        filename: `YABA-Report-${reportStartDate}-to-${reportEndDate}.pdf`,
+        filename: `Executive-Wealth-Statement-${reportStartDate}-to-${reportEndDate}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
@@ -507,7 +507,7 @@ export default function SettingsPage() {
                   {isGeneratingReport ? (
                     <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Generating...</>
                   ) : (
-                    <><Sparkles className="mr-2 h-4 w-4" />AI Summary Report</>
+                    <><Sparkles className="mr-2 h-4 w-4" />Generate Report</>
                   )}
                 </Button>
               </div>

@@ -22,6 +22,8 @@ type SankeyDiagramProps = {
     data: SankeyData;
     width: number;
     height: number;
+    textColor?: string;
+    secondaryColor?: string;
 };
 
 const MARGIN_Y = 24;
@@ -33,7 +35,7 @@ const COLORS = [
 ];
 
 
-export const SankeyDiagram = ({ data, width, height }: SankeyDiagramProps) => {
+export const SankeyDiagram = ({ data, width, height, textColor, secondaryColor }: SankeyDiagramProps) => {
     const sankeyLayout = useMemo(() => {
         const sankeyGenerator = d3Sankey<SankeyNode, SankeyLink>()
             .nodeWidth(15)
@@ -61,16 +63,16 @@ export const SankeyDiagram = ({ data, width, height }: SankeyDiagramProps) => {
                 stroke="none"
             />
             <text
-                x={node.x0! < width / 2 ? node.x1! + 6 : node.x0! - 6}
+                x={node.x0! < MARGIN_X + 20 ? node.x1! + 6 : node.x0! - 6}
                 y={(node.y1! + node.y0!) / 2}
                 dy="0.35em"
-                textAnchor={node.x0! < width / 2 ? "start" : "end"}
+                textAnchor={node.x0! < MARGIN_X + 20 ? "start" : "end"}
                 fontSize={12}
                 fontWeight={300}
-                fill="hsl(var(--foreground))"
+                fill={textColor || "hsl(var(--foreground))"}
             >
                 {node.name}
-                <tspan fontSize="10px" fill="hsl(var(--muted-foreground))">{` (${format(node.value!)})`}</tspan>
+                <tspan fontSize="10px" fill={secondaryColor || "hsl(var(--muted-foreground))"}>{` (${format(node.value!)})`}</tspan>
             </text>
         </g>
     ));
