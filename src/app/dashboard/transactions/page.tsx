@@ -125,13 +125,13 @@ export default function TransactionsPage() {
     };
 
     return (
-        <main className="flex flex-1 flex-col gap-6 p-4 md:gap-8 md:p-8 w-full max-w-screen-2xl">
-            <div>
+        <main className="flex flex-1 flex-col gap-6 p-4 px-0 sm:px-4 md:gap-8 md:p-8 w-full max-w-screen-2xl">
+            <div className="px-4 sm:px-0">
                 <h1 className="font-headline text-2xl font-semibold tracking-tight">Transactions</h1>
                 <p className="text-sm text-muted-foreground mt-1">View and filter all your expenses and income.</p>
             </div>
 
-            <Card>
+            <Card className="border-x-0 sm:border-x rounded-none sm:rounded-xl shadow-none sm:shadow-sm">
                 {/* Filter bar */}
                 <CardHeader className="border-b pb-4">
                     <div className="grid gap-3 md:grid-cols-4">

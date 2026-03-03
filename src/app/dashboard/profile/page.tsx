@@ -269,9 +269,9 @@ export default function SettingsPage() {
     : user?.email?.charAt(0).toUpperCase() || '?';
 
   return (
-    <main className="flex flex-1 flex-col gap-6 p-4 md:gap-8 md:p-8 container mx-auto max-w-4xl">
+    <main className="flex flex-1 flex-col gap-6 px-0 py-4 sm:px-4 md:gap-8 md:p-8 w-full max-w-screen-2xl">
       {/* Page header with avatar */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 px-4 sm:px-0">
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-purple-700 text-white text-lg font-semibold shrink-0">
           {initials}
         </div>
@@ -282,16 +282,18 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="w-full max-w-lg grid grid-cols-4 mb-4">
-          <TabsTrigger value="profile">Account</TabsTrigger>
-          <TabsTrigger value="password">Security</TabsTrigger>
-          <TabsTrigger value="notifications">Alerts</TabsTrigger>
-          <TabsTrigger value="data">Data</TabsTrigger>
-        </TabsList>
+        <div className="px-4 sm:px-0">
+          <TabsList className="w-full max-w-lg grid grid-cols-4 mb-4">
+            <TabsTrigger value="profile">Account</TabsTrigger>
+            <TabsTrigger value="password">Security</TabsTrigger>
+            <TabsTrigger value="notifications">Alerts</TabsTrigger>
+            <TabsTrigger value="data">Data</TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* ── Account ────────────────────────────────────────── */}
         <TabsContent value="profile">
-          <Card>
+          <Card className="border-x-0 sm:border-x rounded-none sm:rounded-xl shadow-none sm:shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">Account Details</CardTitle>
               <CardDescription>Your personal information tied to this account.</CardDescription>
@@ -316,7 +318,7 @@ export default function SettingsPage() {
 
         {/* ── Security ───────────────────────────────────────── */}
         <TabsContent value="password">
-          <Card>
+          <Card className="border-x-0 sm:border-x rounded-none sm:rounded-xl shadow-none sm:shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">Security</CardTitle>
               <CardDescription>Update your password. Use a strong, unique password you don't use elsewhere.</CardDescription>
@@ -345,7 +347,7 @@ export default function SettingsPage() {
 
         {/* ── Notifications ──────────────────────────────────── */}
         <TabsContent value="notifications">
-          <Card>
+          <Card className="border-x-0 sm:border-x rounded-none sm:rounded-xl shadow-none sm:shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">Notification Preferences</CardTitle>
               <CardDescription>Configure how and when YABA communicates with you.</CardDescription>
@@ -460,7 +462,7 @@ export default function SettingsPage() {
 
         {/* ── Data & Reports ─────────────────────────────────── */}
         <TabsContent value="data">
-          <Card>
+          <Card className="border-x-0 sm:border-x rounded-none sm:rounded-xl shadow-none sm:shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">Data & Reports</CardTitle>
               <CardDescription>Select a date range, then export your data or generate an AI-powered summary.</CardDescription>
@@ -531,7 +533,7 @@ export default function SettingsPage() {
           </Card>
 
           {/* Danger Zone */}
-          <Card className="mt-6 border-destructive/40">
+          <Card className="mt-6 border-destructive/40 border-x-0 sm:border-x rounded-none sm:rounded-xl shadow-none sm:shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base text-destructive">Danger Zone</CardTitle>
               <CardDescription>Irreversible actions. Proceed with caution.</CardDescription>

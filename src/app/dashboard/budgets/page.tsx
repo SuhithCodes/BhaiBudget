@@ -176,8 +176,8 @@ export default function BudgetsAndGoalsPage() {
 
     // ── Render ──────────────────────────────────────────────────────
     return (
-        <main className="flex flex-1 flex-col gap-6 p-4 md:gap-8 md:p-8 w-full max-w-screen-2xl">
-            <div>
+        <main className="flex flex-1 flex-col gap-6 px-0 py-4 sm:px-4 md:gap-8 md:p-8 w-full max-w-screen-2xl">
+            <div className="px-4 sm:px-0">
                 <h1 className="font-headline text-2xl font-semibold tracking-tight">Budgets &amp; Goals</h1>
                 <p className="text-sm text-muted-foreground mt-1">Track spending limits and savings targets.</p>
             </div>
@@ -188,20 +188,22 @@ export default function BudgetsAndGoalsPage() {
                 </div>
             ) : (
                 <Tabs defaultValue="budgets" className="w-full">
-                    <TabsList className="grid w-full max-w-sm grid-cols-2 mb-2">
-                        <TabsTrigger value="budgets" className="flex items-center gap-2">
-                            <Target className="h-3.5 w-3.5" />
-                            Budgets
-                        </TabsTrigger>
-                        <TabsTrigger value="savings" className="flex items-center gap-2">
-                            <Star className="h-3.5 w-3.5" />
-                            Savings Goals
-                        </TabsTrigger>
-                    </TabsList>
+                    <div className="px-4 sm:px-0">
+                        <TabsList className="grid w-full max-w-sm grid-cols-2 mb-2">
+                            <TabsTrigger value="budgets" className="flex items-center gap-2">
+                                <Target className="h-3.5 w-3.5" />
+                                Budgets
+                            </TabsTrigger>
+                            <TabsTrigger value="savings" className="flex items-center gap-2">
+                                <Star className="h-3.5 w-3.5" />
+                                Savings Goals
+                            </TabsTrigger>
+                        </TabsList>
+                    </div>
 
                     {/* ── Budgets Tab ── */}
                     <TabsContent value="budgets">
-                        <Card>
+                        <Card className="border-x-0 sm:border-x rounded-none sm:rounded-xl shadow-none sm:shadow-sm">
                             <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
                                 <div>
                                     <CardTitle className="text-lg">Your Budgets</CardTitle>
@@ -235,7 +237,7 @@ export default function BudgetsAndGoalsPage() {
 
                     {/* ── Savings Goals Tab ── */}
                     <TabsContent value="savings">
-                        <Card>
+                        <Card className="border-x-0 sm:border-x rounded-none sm:rounded-xl shadow-none sm:shadow-sm">
                             <CardHeader className="flex flex-row items-center justify-between border-b pb-4">
                                 <div>
                                     <CardTitle className="text-lg">Savings Goals</CardTitle>

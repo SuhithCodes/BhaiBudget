@@ -19,12 +19,10 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { useToast } from "@/hooks/use-toast"
 import { type Income, type IncomeFormData } from "@/types"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { IncomeForm } from "./income-form"
-import { Badge } from "@/components/ui/badge"
 
 interface IncomeListProps {
     incomes: Income[];
@@ -41,7 +39,6 @@ export function IncomeList({
     onIncomeDeleted,
     onIncomeUpdated
 }: IncomeListProps) {
-    const { toast } = useToast();
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const [selectedIncome, setSelectedIncome] = useState<Income | null>(null);
@@ -70,10 +67,57 @@ export function IncomeList({
         }
     };
 
+    const tableContent = (
+        <Table>
+            <TableHeader>
+                <TableRow>
+                    <TableHead>Source</TableHead>
+                    <TableHead className="hidden md:table-cell">Date</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="w-12">
+                        <span className="sr-only">Actions</span>
+                    </TableHead>
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {incomes.length > 0 ? (
+                    incomes.map(income => (
+                        <TableRow key={income.id}>
+                            <TableCell className="font-medium">{income.sourceName}</TableCell>
+                            <TableCell className="hidden md:table-cell">{new Date(income.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</TableCell>
+                            <TableCell className="text-right">{new Intl.NumberFormat("en-US", { style: "currency", currency: income.currency || 'USD' }).format(income.amount)}</TableCell>
+                            <TableCell>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button aria-haspopup="true" size="icon" variant="ghost">
+                                            <MoreHorizontal className="h-4 w-4" />
+                                            <span className="sr-only">Toggle menu</span>
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                        <DropdownMenuItem onSelect={() => openEditDialog(income)}>Edit</DropdownMenuItem>
+                                        <DropdownMenuItem onSelect={() => openDeleteDialog(income)}>Delete</DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </TableCell>
+                        </TableRow>
+                    ))
+                ) : (
+                    <TableRow>
+                        <TableCell colSpan={4} className="h-24 text-center">
+                            No incomes recorded yet.
+                        </TableCell>
+                    </TableRow>
+                )}
+            </TableBody>
+        </Table>
+    );
+
     return (
         <>
-            <Card>
-                {showTitle && (
+            {showTitle ? (
+                <Card>
                     <CardHeader className="border-b pb-4">
                         <div className="flex items-center justify-between">
                             <div>
@@ -82,56 +126,16 @@ export function IncomeList({
                             </div>
                         </div>
                     </CardHeader>
-                )}
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Source</TableHead>
-                                <TableHead className="hidden md:table-cell">Date</TableHead>
-                                <TableHead className="text-right">Amount</TableHead>
-                                <TableHead className="w-12">
-                                    <span className="sr-only">Actions</span>
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {incomes.length > 0 ? (
-                                incomes.map(income => (
-                                    <TableRow key={income.id}>
-                                        <TableCell className="font-medium">{income.sourceName}</TableCell>
-                                        <TableCell className="hidden md:table-cell">{new Date(income.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</TableCell>
-                                        <TableCell className="text-right">{new Intl.NumberFormat("en-US", { style: "currency", currency: income.currency || 'USD' }).format(income.amount)}</TableCell>
-                                        <TableCell>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button aria-haspopup="true" size="icon" variant="ghost">
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                        <span className="sr-only">Toggle menu</span>
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                    <DropdownMenuItem onSelect={() => openEditDialog(income)}>Edit</DropdownMenuItem>
-                                                    <DropdownMenuItem onSelect={() => openDeleteDialog(income)}>Delete</DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center">
-                                        No incomes recorded yet.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
+                    <CardContent>
+                        {tableContent}
+                    </CardContent>
+                </Card>
+            ) : (
+                <div className="-mx-4 sm:mx-0">
+                    {tableContent}
+                </div>
+            )}
 
-            {/* Delete Confirmation Dialog */}
             <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
@@ -147,7 +151,6 @@ export function IncomeList({
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* Edit Income Dialog */}
             <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
