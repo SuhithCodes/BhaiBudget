@@ -2,7 +2,7 @@
 
 import { forwardRef, useMemo } from "react";
 import { type ReportData } from "@/ai/flows/generate-monthly-report";
-import { format, parseISO, eachDayOfInterval, differenceInDays, isSameDay } from "date-fns";
+import { format, parseISO, eachDayOfInterval, differenceInDays } from "date-fns";
 import { SankeyDiagram } from "@/components/dashboard/sankey-diagram";
 import { PARENT_CATEGORIES } from "@/lib/constants";
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, RadialBarChart, RadialBar, Cell, ReferenceLine } from "recharts";
@@ -114,8 +114,11 @@ export const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
             const endDate = parseISO(data.dateRange.end);
             const days = eachDayOfInterval({ start: startDate, end: endDate });
 
-            const startBalance = data.overview.totalNetWorth - data.overview.netBalance;
-            let currentBalance = startBalance;
+            // No opening balance is persisted, so the trend is a running
+            // period net starting at $0 — NOT (totalNetWorth - netBalance),
+            // which collapsed to 0 once totalNetWorth was correctly set equal
+            // to netBalance and made the chart look empty/broken.
+            let currentBalance = 0;
 
             return days.map(day => {
                 const dateStr = format(day, 'yyyy-MM-dd');
@@ -135,9 +138,14 @@ export const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
             });
         }, [data]);
 
-        const periodDays = differenceInDays(parseISO(data.dateRange.end), parseISO(data.dateRange.start)) || 1;
+        const periodDays = Math.max(
+            1,
+            differenceInDays(parseISO(data.dateRange.end), parseISO(data.dateRange.start)) + 1,
+        );
         const burnPerDay = data.overview.totalSpending / periodDays;
-        const bufferDays = burnPerDay > 0 ? Math.round(data.overview.totalNetWorth / burnPerDay) : 999;
+        const bufferDays = burnPerDay > 0 && data.overview.netBalance > 0
+            ? Math.round(data.overview.netBalance / burnPerDay)
+            : 0;
 
         const chartBudgets = useMemo(() => {
             const result = [...data.budgetPerformance];
@@ -188,10 +196,10 @@ export const ReportPreview = forwardRef<HTMLDivElement, ReportPreviewProps>(
                 <div className="space-y-6">
                     {/* ── KPI Row ── */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <StatCard label="Cash on Hand" value={fmt(data.overview.totalNetWorth)} color="text-gray-900" />
-                        <StatCard label="Monthly Burn" value={fmt(data.overview.totalSpending)} color="text-red-700" />
+                        <StatCard label="Period Net" value={fmt(data.overview.netBalance)} color={data.overview.netBalance >= 0 ? "text-emerald-700" : "text-red-700"} />
+                        <StatCard label="Period Spending" value={fmt(data.overview.totalSpending)} color="text-red-700" />
                         <StatCard label="Savings Rate" value={`${data.overview.savingsRate.toFixed(1)}%`} color={data.overview.savingsRate >= 0 ? "text-emerald-700" : "text-red-700"} />
-                        <StatCard label="Days of Buffer" value={`${bufferDays} days`} color={bufferDays > 30 ? "text-sky-700" : "text-amber-700"} />
+                        <StatCard label="Days of Buffer" value={bufferDays > 0 ? `${bufferDays} days` : '—'} color={bufferDays > 30 ? "text-sky-700" : "text-amber-700"} />
                     </div>
 
                     {/* Critical Alerts */}

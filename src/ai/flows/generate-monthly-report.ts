@@ -133,11 +133,12 @@ export async function generateReport(
     overBudgetCategories.sort((a, b) => b.overage - a.overage);
     const topLeaks = overBudgetCategories.slice(0, 3);
 
-    // Executive metrics. Note: without persisted account balances the "net
-    // worth" is just the period's net balance — a rough proxy, not real net worth.
+    // Executive metrics. Without persisted account balances, "net worth" is
+    // just the period's net balance — a period surplus/deficit, not real cash
+    // on hand. The report UI labels it accordingly.
     const totalNetWorth = netBalance;
     const avgMonthlyExpense = totalSpending > 0 ? totalSpending : 1000; // rough approximation for the period
-    const runwayMonths = totalNetWorth / (avgMonthlyExpense || 1);
+    const runwayMonths = totalNetWorth > 0 ? totalNetWorth / (avgMonthlyExpense || 1) : 0;
     const healthScore = (budgetAdherence * 0.5) + (Math.min(100, savingsRate * 2) * 0.5);
 
     // Savings goal progress

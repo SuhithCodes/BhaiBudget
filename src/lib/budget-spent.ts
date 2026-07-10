@@ -15,12 +15,13 @@ import {
     startOfYear,
     endOfYear,
 } from 'date-fns';
+import { WEEK_OPTIONS } from '@/lib/date-range';
 import type { Budget, Expense } from '@/types';
 
 export function getPeriodDateRange(period: Budget['period'], ref: Date = new Date()) {
     switch (period) {
         case 'Weekly':
-            return { start: startOfWeek(ref, { weekStartsOn: 1 }), end: endOfWeek(ref, { weekStartsOn: 1 }) };
+            return { start: startOfWeek(ref, WEEK_OPTIONS), end: endOfWeek(ref, WEEK_OPTIONS) };
         case 'Yearly':
             return { start: startOfYear(ref), end: endOfYear(ref) };
         case 'Monthly':

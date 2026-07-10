@@ -37,10 +37,16 @@ import { useToast } from "@/hooks/use-toast"
 import { checkBudgetAlerts } from "@/lib/check-budget-alerts"
 import { notifyExpenseAdded, notifyIncomeAdded } from "@/lib/push-notifications"
 import { DateRange } from "react-day-picker"
-import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfQuarter, endOfQuarter, startOfDay, endOfDay } from "date-fns"
+import { startOfMonth, endOfMonth } from "date-fns"
 import { DatePickerWithRange } from "@/components/ui/date-range-picker"
 import { ResponsiveSankey } from "@/components/dashboard/responsive-sankey"
 import { PARENT_CATEGORIES as PARENT_CATEGORIES_CONST } from "@/lib/constants"
+import {
+    filterByDateRange,
+    formatRangeLabel,
+    getDatePresetRange,
+    type DatePreset,
+} from "@/lib/date-range"
 
 
 export default function DashboardPage() {
@@ -98,7 +104,10 @@ export default function DashboardPage() {
         }
     }, [user]);
 
-    const recentExpenses = useMemo(() => expenses.slice(0, 5), [expenses]);
+    const recentExpenses = useMemo(
+        () => filterByDateRange(expenses, dateRange).slice(0, 5),
+        [expenses, dateRange],
+    );
 
     const handleExpenseAdded = async (newExpenseData: ExpenseFormData) => {
         if (!user) return;
@@ -155,58 +164,21 @@ export default function DashboardPage() {
         }
     };
 
-    const setDatePreset = (preset: 'today' | 'yesterday' | 'thisWeek' | 'lastWeek' | 'last7Days' | 'thisMonth' | 'thisQuarter' | 'thisYear') => {
-        const now = new Date();
-        switch (preset) {
-            case 'today':
-                setDateRange({ from: startOfDay(now), to: endOfDay(now) });
-                break;
-            case 'yesterday':
-                const yesterday = subDays(now, 1);
-                setDateRange({ from: startOfDay(yesterday), to: endOfDay(yesterday) });
-                break;
-            case 'thisWeek':
-                setDateRange({ from: startOfWeek(now), to: endOfWeek(now) });
-                break;
-            case 'lastWeek':
-                const lastWeekStart = startOfWeek(subDays(now, 7));
-                const lastWeekEnd = endOfWeek(subDays(now, 7));
-                setDateRange({ from: lastWeekStart, to: lastWeekEnd });
-                break;
-            case 'last7Days':
-                setDateRange({ from: subDays(now, 6), to: now });
-                break;
-            case 'thisMonth':
-                setDateRange({ from: startOfMonth(now), to: endOfMonth(now) });
-                break;
-            case 'thisQuarter':
-                setDateRange({ from: startOfQuarter(now), to: endOfQuarter(now) });
-                break;
-            case 'thisYear':
-                setDateRange({ from: startOfYear(now), to: endOfYear(now) });
-                break;
-        }
+    const setDatePreset = (preset: DatePreset) => {
+        setDateRange(getDatePresetRange(preset));
     };
 
-    const filteredExpenses = useMemo(() => {
-        if (!dateRange?.from) return expenses;
-        const fromDate = startOfDay(dateRange.from);
-        const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from); // If no 'to' date, use 'from' date for single day selection
-        return expenses.filter(expense => {
-            const expenseDate = new Date(expense.date + 'T00:00:00');
-            return expenseDate >= fromDate && expenseDate <= toDate;
-        });
-    }, [expenses, dateRange]);
+    const filteredExpenses = useMemo(
+        () => filterByDateRange(expenses, dateRange),
+        [expenses, dateRange],
+    );
 
-    const filteredIncomes = useMemo(() => {
-        if (!dateRange?.from) return incomes;
-        const fromDate = startOfDay(dateRange.from);
-        const toDate = dateRange.to ? endOfDay(dateRange.to) : endOfDay(dateRange.from);
-        return incomes.filter(income => {
-            const incomeDate = new Date(income.date + 'T00:00:00');
-            return incomeDate >= fromDate && incomeDate <= toDate;
-        });
-    }, [incomes, dateRange]);
+    const filteredIncomes = useMemo(
+        () => filterByDateRange(incomes, dateRange),
+        [incomes, dateRange],
+    );
+
+    const periodLabel = useMemo(() => formatRangeLabel(dateRange), [dateRange]);
 
     const sankeyData = useMemo((): SankeyData => {
         const PARENT_CATS: Record<string, string[]> = {};
@@ -419,7 +391,13 @@ export default function DashboardPage() {
                     </DropdownMenu>
                 </div>
 
-                <DashboardSummary expenses={filteredExpenses} incomes={filteredIncomes} />
+                <DashboardSummary
+                    expenses={filteredExpenses}
+                    incomes={filteredIncomes}
+                    allExpenses={expenses}
+                    allIncomes={incomes}
+                    periodLabel={periodLabel}
+                />
 
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
                     <div className="lg:col-span-3">
