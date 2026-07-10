@@ -96,10 +96,11 @@ export default function SettingsPage() {
     }
     setSendingTestEmail(true);
     try {
+      // The endpoint derives the recipient from the verified ID token.
+      const idToken = await user.getIdToken();
       const res = await fetch('/api/notifications/send-test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: user.email }),
+        headers: { Authorization: `Bearer ${idToken}` },
       });
       if (!res.ok) throw new Error('Failed');
       toast({ title: 'Test Email Sent!', description: `Check your inbox at ${user.email}` });
