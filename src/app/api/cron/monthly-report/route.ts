@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { COLLECTIONS } from '@/lib/collections';
+import { collection, getDocs, query, where, doc, getDoc } from 'firebase/firestore';
 import { generateReport } from '@/ai/flows/generate-monthly-report';
 import { sendMonthlyReport, type MonthlyReportEmailData } from '@/lib/email';
 import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns';
@@ -10,14 +11,15 @@ import { startOfMonth, endOfMonth, subMonths, format } from 'date-fns';
  * Runs on the 1st of each month — generates AI report for the PREVIOUS month
  * and emails it to all users who have `monthlyReports` enabled.
  *
- * Vercel Cron: configured in vercel.json
- * Manual trigger: POST /api/cron/monthly-report with CRON_SECRET header
+ * Vercel Cron: configured in vercel.json. Vercel invokes cron endpoints with
+ * GET, so the handler is exported as both GET (cron) and POST (manual trigger).
+ * Both require `Authorization: Bearer <CRON_SECRET>` — and fail closed when
+ * CRON_SECRET is unset.
  */
-export async function POST(req: NextRequest) {
-    // Verify cron secret to prevent unauthorized access
+async function handler(req: NextRequest) {
     const authHeader = req.headers.get('authorization');
     const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest) {
 
         // Get all users with monthlyReports enabled
         const prefsSnapshot = await getDocs(
-            query(collection(db, 'userPreferences'), where('monthlyReports', '==', true)),
+            query(collection(db, COLLECTIONS.userPreferences), where('monthlyReports', '==', true)),
         );
 
         if (prefsSnapshot.empty) {
@@ -45,25 +47,20 @@ export async function POST(req: NextRequest) {
             const userId = prefDoc.id;
 
             try {
-                // Get user email from Firebase Auth users collection or use the preference doc
-                // Since we saved preferences by userId, we need to find the user's email
-                const usersSnapshot = await getDocs(
-                    query(collection(db, 'expenses'), where('userId', '==', userId)),
-                );
-
                 // Skip users with no data
-                if (usersSnapshot.empty) continue;
+                const expensesSnapshot = await getDocs(
+                    query(collection(db, COLLECTIONS.expenses), where('userId', '==', userId)),
+                );
+                if (expensesSnapshot.empty) continue;
 
-                // Generate the AI report
-                const reportData = await generateReport(userId, startDate, endDate);
-
-                // Get user email — we'll look it up from any doc that might have it,
-                // or use a users collection if available
                 const userEmail = await getUserEmail(userId);
                 if (!userEmail) {
                     console.warn(`No email found for user ${userId}, skipping`);
                     continue;
                 }
+
+                // Generate the AI report
+                const reportData = await generateReport(userId, startDate, endDate);
 
                 // Build email data
                 const emailData: MonthlyReportEmailData = {
@@ -98,28 +95,19 @@ export async function POST(req: NextRequest) {
     }
 }
 
+export const GET = handler;
+export const POST = handler; // keep for manual trigger
+
 /**
- * Helper to find user email. Checks the 'users' collection first,
- * then falls back to any stored email in userPreferences.
+ * The recipient address is stored on the userPreferences doc when the user
+ * enables monthly reports (see profile page).
  */
 async function getUserEmail(userId: string): Promise<string | null> {
-    // Try users collection
     try {
-        const { doc, getDoc } = await import('firebase/firestore');
-        const userDoc = await getDoc(doc(db, 'users', userId));
-        if (userDoc.exists() && userDoc.data().email) {
-            return userDoc.data().email;
-        }
-    } catch { }
-
-    // Try userPreferences for stored email
-    try {
-        const { doc, getDoc } = await import('firebase/firestore');
-        const prefDoc = await getDoc(doc(db, 'userPreferences', userId));
+        const prefDoc = await getDoc(doc(db, COLLECTIONS.userPreferences, userId));
         if (prefDoc.exists() && prefDoc.data().email) {
             return prefDoc.data().email;
         }
     } catch { }
-
     return null;
 }

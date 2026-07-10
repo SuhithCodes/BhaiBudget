@@ -44,9 +44,17 @@ export const budgetSchema = z.object({
   category: z.string().min(1, 'Category is required.'),
   amount: z.number().min(0.01, 'Amount must be greater than 0.'),
   period: z.enum(['Weekly', 'Monthly', 'Yearly']),
+  // Alert dedup state: period-start key (YYYY-MM-DD) of the last period each
+  // alert tier fired in. See src/lib/check-budget-alerts.ts.
+  alertedAt: z
+    .object({
+      warning: z.string().optional(),
+      exceeded: z.string().optional(),
+    })
+    .optional(),
 });
 
-export const budgetFormSchema = budgetSchema.omit({ id: true, userId: true });
+export const budgetFormSchema = budgetSchema.omit({ id: true, userId: true, alertedAt: true });
 
 export type Budget = z.infer<typeof budgetSchema>;
 export type BudgetFormData = z.infer<typeof budgetFormSchema>;

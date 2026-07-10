@@ -22,7 +22,8 @@ import {
 } from "@/components/ui/dialog";
 import { BudgetForm } from "./budget-form";
 import { useMemo, useState } from "react";
-import { startOfMonth, startOfWeek, startOfYear, endOfMonth, endOfWeek, endOfYear, parseISO, isWithinInterval, differenceInCalendarDays, startOfDay } from 'date-fns';
+import { differenceInCalendarDays, startOfDay } from 'date-fns';
+import { getBudgetSpent, getPeriodDateRange } from "@/lib/budget-spent";
 import { cn } from "@/lib/utils";
 
 interface BudgetListProps {
@@ -32,18 +33,6 @@ interface BudgetListProps {
     onBudgetUpdated: (budgetId: string, budget: BudgetFormData) => void;
 }
 
-const getPeriodDateRange = (period: 'Weekly' | 'Monthly' | 'Yearly') => {
-    const now = new Date();
-    switch (period) {
-        case 'Weekly':
-            return { start: startOfWeek(now, { weekStartsOn: 1 }), end: endOfWeek(now, { weekStartsOn: 1 }) };
-        case 'Monthly':
-            return { start: startOfMonth(now), end: endOfMonth(now) };
-        case 'Yearly':
-            return { start: startOfYear(now), end: endOfYear(now) };
-    }
-};
-
 export function BudgetList({ budgets, expenses, onBudgetDeleted, onBudgetUpdated }: BudgetListProps) {
     const [budgetToDelete, setBudgetToDelete] = useState<Budget | null>(null);
     const [budgetToEdit, setBudgetToEdit] = useState<Budget | null>(null);
@@ -51,12 +40,7 @@ export function BudgetList({ budgets, expenses, onBudgetDeleted, onBudgetUpdated
     const calculatedBudgets = useMemo(() => {
         return budgets.map((budget) => {
             const range = getPeriodDateRange(budget.period);
-            const spent = expenses
-                .filter((expense) => {
-                    const expenseDate = parseISO(expense.date);
-                    return expense.category === budget.category && isWithinInterval(expenseDate, range);
-                })
-                .reduce((sum, expense) => sum + expense.totalAmount, 0);
+            const spent = getBudgetSpent(budget, expenses);
 
             const remaining = budget.amount - spent;
             const progress = Math.min((spent / budget.amount) * 100, 100); // Fix 7: Cap at 100%

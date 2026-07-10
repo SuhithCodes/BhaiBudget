@@ -35,8 +35,7 @@ import { IncomeForm } from "@/components/income/income-form"
 import { type IncomeFormData, type Income } from "@/types"
 import { useToast } from "@/hooks/use-toast"
 import { checkBudgetAlerts } from "@/lib/check-budget-alerts"
-import { getBudgets } from "@/lib/actions/budgets"
-import { notifyExpenseAdded, notifyIncomeAdded, notifyBudgetExceeded } from "@/lib/push-notifications"
+import { notifyExpenseAdded, notifyIncomeAdded } from "@/lib/push-notifications"
 import { DateRange } from "react-day-picker"
 import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, startOfQuarter, endOfQuarter, startOfDay, endOfDay } from "date-fns"
 import { DatePickerWithRange } from "@/components/ui/date-range-picker"
@@ -113,32 +112,7 @@ export default function DashboardPage() {
             notifyExpenseAdded(newExpenseData.vendorName, newExpenseData.totalAmount);
 
             // Check budget alerts (fire-and-forget)
-            if (user.email) {
-                getBudgets(user.uid).then((budgets) => {
-                    const allExpensesWithNew = [...expenses, newExpenseData as Expense];
-
-                    // Check for exceeded budgets and send push + email
-                    const matchingBudgets = budgets.filter(
-                        (b) => b.category.toLowerCase() === newExpenseData.category.toLowerCase(),
-                    );
-                    const totalInCategory = allExpensesWithNew
-                        .filter((e) => e.category.toLowerCase() === newExpenseData.category.toLowerCase())
-                        .reduce((sum, e) => sum + e.totalAmount, 0);
-                    for (const budget of matchingBudgets) {
-                        if (totalInCategory > budget.amount) {
-                            notifyBudgetExceeded(budget.name, totalInCategory, budget.amount);
-                        }
-                    }
-
-                    checkBudgetAlerts(
-                        user.uid,
-                        user.email!,
-                        newExpenseData.category,
-                        allExpensesWithNew,
-                        budgets,
-                    );
-                }).catch(() => { });
-            }
+            checkBudgetAlerts(user.uid, newExpenseData.category).catch(() => { });
         } catch (error) {
             console.error("Error adding expense: ", error);
         }
@@ -173,6 +147,9 @@ export default function DashboardPage() {
             await updateExpense(expenseId, data);
             setExpenses((prev) => prev.map((e) => e.id === expenseId ? { ...e, ...data, id: expenseId } : e));
             toast({ title: "Success", description: "Expense updated." });
+            if (user) {
+                checkBudgetAlerts(user.uid, data.category).catch(() => { });
+            }
         } catch (error) {
             toast({ variant: "destructive", title: "Error", description: "Could not update expense." });
         }
