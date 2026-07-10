@@ -9,6 +9,8 @@ import { useAuth } from "@/context/auth-context";
 import { processVoiceTransaction, type VoiceTransactionResult, type ParsedTransaction } from "@/ai/flows/parse-voice-transaction";
 import { db } from "@/lib/firebase";
 import { collection, addDoc } from "firebase/firestore";
+import { checkBudgetAlerts } from "@/lib/check-budget-alerts";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
 export type AgentState = "idle" | "recording" | "processing" | "confirming" | "no-result";
@@ -73,7 +75,9 @@ export function VoiceTransactionAgent({ onStateChange, onMicClickRef }: VoiceTra
                 try {
                     const arrayBuffer = await audioBlob.arrayBuffer();
                     const base64 = Buffer.from(arrayBuffer).toString("base64");
-                    const voiceResult = await processVoiceTransaction(base64, mimeType);
+                    // Pass the client's local calendar date so "today"/"yesterday"
+                    // resolve in the user's timezone, not the server's UTC.
+                    const voiceResult = await processVoiceTransaction(base64, mimeType, format(new Date(), "yyyy-MM-dd"));
 
                     if (voiceResult.transactions.length === 0) {
                         setResult(voiceResult);
@@ -117,6 +121,7 @@ export function VoiceTransactionAgent({ onStateChange, onMicClickRef }: VoiceTra
             setState("processing");
             let expenseCount = 0;
             let incomeCount = 0;
+            const expenseCategories = new Set<string>();
 
             for (const tx of result.transactions) {
                 if (tx.type === "expense" && tx.expense) {
@@ -125,6 +130,7 @@ export function VoiceTransactionAgent({ onStateChange, onMicClickRef }: VoiceTra
                         userId: user.uid,
                         currency: "USD",
                     });
+                    expenseCategories.add(tx.expense.category);
                     expenseCount++;
                 } else if (tx.type === "income" && tx.income) {
                     await addDoc(collection(db, "incomes"), {
@@ -134,6 +140,11 @@ export function VoiceTransactionAgent({ onStateChange, onMicClickRef }: VoiceTra
                     });
                     incomeCount++;
                 }
+            }
+
+            // Check budget alerts for every affected category (fire-and-forget)
+            for (const category of expenseCategories) {
+                checkBudgetAlerts(user.uid, category).catch(() => { });
             }
 
             const parts: string[] = [];

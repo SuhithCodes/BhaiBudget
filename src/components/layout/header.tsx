@@ -19,6 +19,7 @@ import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import { getCurrentBalance } from "@/lib/date-range";
 
 export function Header() {
   const { user, loading } = useAuth();
@@ -64,7 +65,11 @@ export function Header() {
     };
   }, [user]);
 
-  const balance = useMemo(() => incomeTotal - expenseTotal, [incomeTotal, expenseTotal]);
+  // Same helper the dashboard Current Balance card uses, so the two can never drift.
+  const balance = useMemo(
+    () => getCurrentBalance([{ amount: incomeTotal }], [{ totalAmount: expenseTotal }]),
+    [incomeTotal, expenseTotal],
+  );
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value || 0);
 

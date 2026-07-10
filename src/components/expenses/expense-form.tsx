@@ -5,6 +5,7 @@ import { useForm, useFieldArray, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Camera, Loader2, UploadCloud, X, PenLine, Clock, Receipt, CreditCard, PlusCircle, Trash2 } from "lucide-react"
 import Image from "next/image"
+import { format } from "date-fns"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -61,7 +62,7 @@ export function ExpenseForm({ onSubmit: onExpenseSubmit, initialData }: ExpenseF
         mode: 'onChange', // Validate on change so isValid is accurate
         defaultValues: initialData || {
             vendorName: "",
-            date: new Date().toISOString().split('T')[0],
+            date: format(new Date(), 'yyyy-MM-dd'),
             totalAmount: 0,
             category: "",
             lineItems: [],
@@ -154,7 +155,9 @@ export function ExpenseForm({ onSubmit: onExpenseSubmit, initialData }: ExpenseF
             resetForm();
         } else {
             setProcessedData(result);
-            const newDate = new Date(result.date).toISOString().split('T')[0];
+            // result.date is already validated as YYYY-MM-DD server-side; using
+            // it verbatim avoids the local-midnight → UTC day-shift bug.
+            const newDate = result.date;
             const lineItems = result.lineItems?.map(item => ({
                 name: item.name || '',
                 amount: item.amount || 0,
@@ -260,7 +263,7 @@ export function ExpenseForm({ onSubmit: onExpenseSubmit, initialData }: ExpenseF
         if (!initialData) {
             form.reset({
                 vendorName: "",
-                date: new Date().toISOString().split('T')[0],
+                date: format(new Date(), 'yyyy-MM-dd'),
                 totalAmount: 0,
                 category: "",
                 lineItems: [],

@@ -14,13 +14,14 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
-import { format, parseISO, isWithinInterval } from 'date-fns';
+import { format } from 'date-fns';
 import { useToast } from "@/hooks/use-toast";
 import { deleteExpense, updateExpense } from "@/lib/actions/expenses";
 import { type ExpenseFormData, type IncomeFormData } from "@/types";
 import { IncomeList } from "@/components/income/income-list";
 import { deleteIncome, updateIncome } from "@/lib/actions/incomes";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { isDateInRange } from "@/lib/date-range";
 
 export default function TransactionsPage() {
     const { user } = useAuth();
@@ -67,23 +68,22 @@ export default function TransactionsPage() {
     const availableMonths = useMemo(() => {
         const months = new Set<string>();
         [...expenses, ...incomes].forEach(transaction => {
-            const month = format(parseISO(transaction.date), 'yyyy-MM');
-            months.add(month);
+            // Use the YYYY-MM prefix directly — parseISO would shift the day
+            // (and sometimes the month) in west-of-UTC timezones.
+            months.add(transaction.date.slice(0, 7));
         });
         return ["all", ...Array.from(months).sort().reverse()];
     }, [expenses, incomes]);
 
     const filteredExpenses = useMemo(() => {
         return expenses.filter(expense => {
-            const expenseDate = parseISO(expense.date);
-
             const matchesCategory = selectedCategory === "all" || expense.category === selectedCategory;
             const matchesSearch = expense.vendorName.toLowerCase().includes(searchQuery.toLowerCase());
 
-            const expenseMonth = format(expenseDate, 'yyyy-MM');
+            const expenseMonth = expense.date.slice(0, 7);
             const matchesMonth = selectedMonth === 'all' || expenseMonth === selectedMonth;
 
-            const matchesDate = !dateRange || (dateRange.from && isWithinInterval(expenseDate, { start: dateRange.from, end: dateRange.to || dateRange.from }));
+            const matchesDate = isDateInRange(expense.date, dateRange);
 
             return matchesCategory && matchesSearch && matchesDate && matchesMonth;
         });
@@ -91,14 +91,12 @@ export default function TransactionsPage() {
 
     const filteredIncomes = useMemo(() => {
         return incomes.filter(income => {
-            const incomeDate = parseISO(income.date);
-
             const matchesSearch = income.sourceName.toLowerCase().includes(searchQuery.toLowerCase());
 
-            const incomeMonth = format(incomeDate, 'yyyy-MM');
+            const incomeMonth = income.date.slice(0, 7);
             const matchesMonth = selectedMonth === 'all' || incomeMonth === selectedMonth;
 
-            const matchesDate = !dateRange || (dateRange.from && isWithinInterval(incomeDate, { start: dateRange.from, end: dateRange.to || dateRange.from }));
+            const matchesDate = isDateInRange(income.date, dateRange);
 
             return matchesSearch && matchesDate && matchesMonth;
         });
@@ -163,7 +161,7 @@ export default function TransactionsPage() {
                             <SelectContent>
                                 {availableMonths.map(month => (
                                     <SelectItem key={month} value={month}>
-                                        {month === 'all' ? 'All Months' : format(parseISO(month + '-01'), 'MMMM yyyy')}
+                                        {month === 'all' ? 'All Months' : format(new Date(month + '-01T12:00:00'), 'MMMM yyyy')}
                                     </SelectItem>
                                 ))}
                             </SelectContent>

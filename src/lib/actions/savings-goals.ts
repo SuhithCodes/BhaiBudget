@@ -1,10 +1,11 @@
 'use server';
 
 import { db } from '@/lib/firebase';
+import { COLLECTIONS } from '@/lib/collections';
 import { collection, addDoc, getDocs, query, where, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { type SavingsGoal, type SavingsGoalFormData } from '@/types';
 
-const savingsGoalsCollection = collection(db, 'savingsGoals');
+const savingsGoalsCollection = collection(db, COLLECTIONS.savingsGoals);
 
 // Create a new savings goal
 export async function addSavingsGoal(goalData: SavingsGoalFormData, userId: string): Promise<SavingsGoal> {
@@ -32,12 +33,12 @@ export async function getSavingsGoals(userId: string): Promise<SavingsGoal[]> {
 
 // Update an existing savings goal
 export async function updateSavingsGoal(goalId: string, goalData: Partial<SavingsGoalFormData>): Promise<void> {
-    const goalDoc = doc(db, 'savingsGoals', goalId);
+    const goalDoc = doc(db, COLLECTIONS.savingsGoals, goalId);
     await updateDoc(goalDoc, goalData);
 }
 
 // Delete a savings goal
 export async function deleteSavingsGoal(goalId: string): Promise<void> {
-    const goalDoc = doc(db, 'savingsGoals', goalId);
+    const goalDoc = doc(db, COLLECTIONS.savingsGoals, goalId);
     await deleteDoc(goalDoc);
-} 
+}

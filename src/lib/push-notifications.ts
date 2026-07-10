@@ -3,8 +3,6 @@
  * Uses the Web Notifications API — no service worker needed for basic notifications.
  */
 
-export type NotificationType = 'budget-alert' | 'expense-added' | 'income-added' | 'report-ready';
-
 interface PushNotificationOptions {
     title: string;
     body: string;
@@ -88,13 +86,5 @@ export function notifyIncomeAdded(sourceName: string, amount: number) {
         title: `YABA — Income Recorded`,
         body: `+$${amount.toFixed(2)} — ${sourceName}`,
         tag: 'income-added',
-    });
-}
-
-export function notifyReportReady() {
-    return sendPushNotification({
-        title: 'YABA — Report Available',
-        body: 'Your financial summary is ready to view.',
-        tag: 'report-ready',
     });
 }

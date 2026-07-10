@@ -1,14 +1,29 @@
 'use server';
 
+import { headers } from 'next/headers';
 import { extractReceiptData } from '@/ai/flows/extract-receipt-data';
 import { categorizeExpense } from '@/ai/flows/categorize-expenses';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { type ProcessedReceiptData } from '@/types';
+
+// ~5 MB of image data once base64 overhead (~4/3) is accounted for.
+const MAX_RECEIPT_DATA_URI_CHARS = 7_000_000;
 
 export async function processReceipt(
   dataURI: string
 ): Promise<ProcessedReceiptData | { error: string }> {
   if (!dataURI) {
     return { error: 'No receipt image provided.' };
+  }
+
+  if (dataURI.length > MAX_RECEIPT_DATA_URI_CHARS) {
+    return { error: 'Receipt image is too large. Please use an image under 5 MB.' };
+  }
+
+  const requestHeaders = await headers();
+  const clientKey = requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  if (!checkRateLimit(`receipt:${clientKey}`, { limit: 30, windowMs: 60 * 60 * 1000 })) {
+    return { error: 'Too many receipt scans. Please try again later.' };
   }
 
   try {
@@ -23,7 +38,7 @@ export async function processReceipt(
     }
 
     const categorizationInput = {
-      description: `${extractedData.vendorName} ${extractedData.lineItems?.join(', ') || ''}`.trim(),
+      description: `${extractedData.vendorName} ${extractedData.lineItems?.map((item) => item.name).join(', ') || ''}`.trim(),
       vendor: extractedData.vendorName,
       amount: extractedData.totalAmount,
       date: extractedData.date,
