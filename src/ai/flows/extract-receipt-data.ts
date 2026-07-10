@@ -9,6 +9,8 @@
  */
 
 import { groq, VISION_MODEL, DEFAULT_SETTINGS } from '@/ai/groq';
+import { withRetry } from '@/ai/utils/retry';
+import { isValidIsoDate } from '@/ai/utils/validation';
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
 
 export interface ExtractReceiptDataInput {
@@ -57,6 +59,8 @@ IMPORTANT: Include ALL charges and adjustments as line items:
 
 If no tax amount is explicitly listed on the receipt, set the 'taxes' field to 0.
 
+Date rules: receipts may print dates as MM/DD/YYYY (US) or DD/MM/YYYY. If ambiguous, prefer MM/DD/YYYY. Always convert to YYYY-MM-DD. A two-digit year means 20YY. If no date is visible, return null — do not guess.
+
 Output the data in JSON format only. Do not include any surrounding text or markdown code blocks.
 
 Expected JSON structure:
@@ -74,39 +78,37 @@ Expected JSON structure:
   "lineItems": [{ "name": string, "quantity": number | null, "amount": number }] | null
 }`;
 
-  // Parse the data URI to extract MIME type and base64 data
-  const dataUriMatch = input.photoDataUri.match(/^data:([^;]+);base64,(.+)$/);
-  
-  if (!dataUriMatch) {
-    console.error('Invalid data URI format');
-    return { isReceipt: false };
+  // Validate the data URI shape before spending an inference call on it
+  if (!/^data:[^;]+;base64,.+$/.test(input.photoDataUri)) {
+    throw new Error('Invalid image data. Please upload the receipt again.');
   }
 
-  const [, mimeType, base64Data] = dataUriMatch;
-
-  const chatCompletion = await groq.chat.completions.create({
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: prompt,
-          },
-          {
-            type: 'image_url',
-            image_url: {
-              url: input.photoDataUri,
+  const chatCompletion = await withRetry(() =>
+    groq.chat.completions.create({
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: prompt,
             },
-          },
-        ],
-      },
-    ],
-    model: VISION_MODEL,
-    temperature: DEFAULT_SETTINGS.temperature,
-    max_tokens: DEFAULT_SETTINGS.max_tokens,
-    top_p: DEFAULT_SETTINGS.top_p,
-  });
+            {
+              type: 'image_url',
+              image_url: {
+                url: input.photoDataUri,
+              },
+            },
+          ],
+        },
+      ],
+      model: VISION_MODEL,
+      // Extraction has one right answer — no sampling randomness.
+      temperature: 0,
+      max_tokens: DEFAULT_SETTINGS.max_tokens,
+      top_p: DEFAULT_SETTINGS.top_p,
+    }),
+  );
 
   const responseText = chatCompletion.choices[0]?.message?.content || '';
 
@@ -125,7 +127,11 @@ Expected JSON structure:
 
     if (output.isReceipt) {
       if (result.vendorName) output.vendorName = String(result.vendorName);
-      if (result.date) output.date = String(result.date);
+      // Only accept a strict YYYY-MM-DD date. A malformed date saved to
+      // Firestore silently disappears from every report (lexicographic date
+      // filtering), so leaving it unset — which the caller surfaces as a
+      // "try a clearer image" error — degrades gracefully instead.
+      if (isValidIsoDate(result.date)) output.date = result.date;
       if (result.time) output.time = String(result.time);
       if (typeof result.totalAmount === 'number') output.totalAmount = result.totalAmount;
       if (result.category && EXPENSE_CATEGORIES.includes(result.category)) {
@@ -147,6 +153,8 @@ Expected JSON structure:
     return output;
   } catch (error) {
     console.error('Failed to parse AI response:', responseText, error);
-    return { isReceipt: false };
+    // Throw instead of returning { isReceipt: false } so the user sees
+    // "AI processing failed" rather than the misleading "not a receipt".
+    throw new Error('AI processing failed while reading the receipt. Please try again.');
   }
 }

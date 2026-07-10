@@ -10,7 +10,12 @@
  */
 
 import { groq, DEFAULT_SETTINGS } from '@/ai/groq';
+import { withRetry } from '@/ai/utils/retry';
+import { parseInsights, type InsightItem } from '@/ai/utils/parse-insights';
 import { db } from '@/lib/firebase';
+import { COLLECTIONS } from '@/lib/collections';
+import { getBudgetSpent } from '@/lib/budget-spent';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { type Expense, type Income, type Budget, type SavingsGoal } from '@/types';
 
@@ -64,11 +69,7 @@ export interface ReportData {
     rawIncomes: Income[];
 }
 
-export interface InsightItem {
-    emoji: string;
-    title: string;
-    detail: string;
-}
+export type { InsightItem };
 
 // ── Server Action ────────────────────────────────────────────────
 
@@ -77,13 +78,16 @@ export async function generateReport(
     startDate: string,
     endDate: string,
 ): Promise<ReportData> {
+    if (!checkRateLimit(`generate-report:${userId}`, { limit: 10, windowMs: 60 * 60 * 1000 })) {
+        throw new Error('Too many report requests. Please try again later.');
+    }
+
     // 1. Fetch all data in parallel
-    const [expenses, incomes, budgets, goals, balances] = await Promise.all([
+    const [expenses, incomes, budgets, goals] = await Promise.all([
         fetchExpenses(userId, startDate, endDate),
         fetchIncomes(userId, startDate, endDate),
         fetchBudgets(userId),
         fetchSavingsGoals(userId),
-        fetchBalances(userId),
     ]);
 
     // 2. Aggregate
@@ -105,13 +109,13 @@ export async function generateReport(
         }))
         .sort((a, b) => b.amount - a.amount);
 
-    // Budget performance
+    // Budget performance — window each budget by its own period, anchored to
+    // the end of the report range (shared logic with the budgets page/alerts).
+    const periodRef = new Date(`${endDate}T00:00:00`);
     let budgetAdherence = 100;
     const overBudgetCategories: { category: string; limit: number; spent: number; overage: number }[] = [];
     const budgetPerformance: BudgetPerformance[] = budgets.map((b) => {
-        const spent = expenses
-            .filter((e) => e.category === b.category)
-            .reduce((sum, e) => sum + e.totalAmount, 0);
+        const spent = getBudgetSpent(b, expenses, periodRef);
         const remaining = b.amount - spent;
         const ratio = b.amount > 0 ? spent / b.amount : 0;
         const status: BudgetPerformance['status'] =
@@ -129,14 +133,9 @@ export async function generateReport(
     overBudgetCategories.sort((a, b) => b.overage - a.overage);
     const topLeaks = overBudgetCategories.slice(0, 3);
 
-    // Executive Metrics
-    let totalNetWorth = 0;
-    if (balances.length > 0) {
-        balances.forEach(b => totalNetWorth += (b.amount || 0));
-    } else {
-        totalNetWorth = totalIncome - totalSpending;
-    }
-
+    // Executive metrics. Note: without persisted account balances the "net
+    // worth" is just the period's net balance — a rough proxy, not real net worth.
+    const totalNetWorth = netBalance;
     const avgMonthlyExpense = totalSpending > 0 ? totalSpending : 1000; // rough approximation for the period
     const runwayMonths = totalNetWorth / (avgMonthlyExpense || 1);
     const healthScore = (budgetAdherence * 0.5) + (Math.min(100, savingsRate * 2) * 0.5);
@@ -201,7 +200,10 @@ interface InsightsInput {
 }
 
 async function generateAIInsights(data: InsightsInput): Promise<InsightItem[]> {
-    const prompt = `You are an elite personal wealth advisor (GPT OSS 120B). Analyze the following financial data for the period ${data.startDate} to ${data.endDate}.
+    const overBudget = data.budgetPerformance.filter((b) => b.status === 'over-budget');
+    const topSpending = data.spendingByCategory.slice(0, 5);
+
+    const prompt = `You are an elite personal wealth advisor. Analyze the following financial data for the period ${data.startDate} to ${data.endDate}.
 
 Financial Summary:
 - Total Income: $${data.totalIncome.toFixed(2)}
@@ -209,56 +211,54 @@ Financial Summary:
 - Net Balance: $${data.netBalance.toFixed(2)}
 - Savings Rate: ${data.savingsRate.toFixed(1)}%
 
+Top Spending Categories:
+${topSpending.length > 0 ? topSpending.map((c) => `- ${c.category}: $${c.amount.toFixed(2)} (${c.percentage.toFixed(0)}% of spending)`).join('\n') : 'No spending recorded.'}
+
 Budget Leaks:
-${data.budgetPerformance.filter(b => b.status === 'over-budget').length > 0 ?
-            data.budgetPerformance.filter(b => b.status === 'over-budget').map((b) => `- ${b.category}: $${b.spent.toFixed(2)} / $${b.limit.toFixed(2)} [OVER by $${Math.abs(b.remaining).toFixed(2)}]`).join('\n')
+${overBudget.length > 0
+            ? overBudget.map((b) => `- ${b.category}: $${b.spent.toFixed(2)} / $${b.limit.toFixed(2)} [OVER by $${Math.abs(b.remaining).toFixed(2)}]`).join('\n')
             : 'No budget overages detected.'}
 
 Savings Goals & Velocity:
 ${data.savingsGoals.length > 0 ? data.savingsGoals.map((g) => `- ${g.name}: ${g.progressPercent.toFixed(0)}%`).join('\n') : 'No active savings goals.'}
 
-Return EXACTLY 3 structured, highly insightful points as a JSON array. Each insight must have:
+Produce EXACTLY 3 structured, highly insightful points. Each insight must have:
 - "emoji": a single relevant emoji
 - "title": a powerful, executive-style short title (3-5 words)
 - "detail": a sophisticated recommendation or observation using specific numbers
 
 Focus on:
 1. Executive summary of liquidity/health
-2. Strategic cost reduction targeting the exact leak categories
+2. Strategic cost reduction targeting the largest spending and leak categories
 3. Goal acceleration optimization
 
-Return ONLY a valid JSON array, no markdown.`;
+Return ONLY this JSON object, no markdown:
+{ "insights": [ { "emoji": "...", "title": "...", "detail": "..." }, ... exactly 3 items ] }`;
 
     try {
-        const completion = await groq.chat.completions.create({
-            messages: [
-                { role: 'system', content: 'You are a JSON-only financial strategist. Return a valid JSON array.' },
-                { role: 'user', content: prompt },
-            ],
-            model: REPORT_MODEL,
-            temperature: 0.3,
-            max_tokens: DEFAULT_SETTINGS.max_tokens,
-            top_p: DEFAULT_SETTINGS.top_p,
-            response_format: { type: 'json_object' },
-        });
+        const completion = await withRetry(() =>
+            groq.chat.completions.create({
+                messages: [
+                    { role: 'system', content: 'You are a JSON-only financial strategist. Return a valid JSON object with an "insights" array.' },
+                    { role: 'user', content: prompt },
+                ],
+                model: REPORT_MODEL,
+                temperature: 0.3,
+                // Reasoning models spend tokens on reasoning before the answer;
+                // give them room so the JSON is never truncated.
+                max_tokens: 4096,
+                reasoning_effort: 'low',
+                top_p: DEFAULT_SETTINGS.top_p,
+                response_format: { type: 'json_object' },
+            }),
+        );
 
-        const responseText = completion.choices[0]?.message?.content?.trim() || '';
-
-        let parsed = null;
-        try {
-            parsed = JSON.parse(responseText);
-        } catch (e) {
-            const match = responseText.match(/\[[\s\S]*\]/);
-            if (match) parsed = JSON.parse(match[0]);
-        }
-
-        let insights = Array.isArray(parsed) ? parsed : (parsed?.insights || []);
-
-        return insights.filter((i: any) => i.emoji && i.title && i.detail).slice(0, 3);
+        const responseText = completion.choices[0]?.message?.content ?? '';
+        return parseInsights(responseText);
     } catch (error) {
         console.error('AI Strategy generation failed:', error);
         return [
-            { emoji: '⚠️', title: 'Analysis Offline', detail: 'The AI strategist engine was unable to parse current data.' }
+            { emoji: '⚠️', title: 'Analysis Offline', detail: 'The AI strategist engine was unable to analyze current data. Try regenerating the report.' },
         ];
     }
 }
@@ -267,7 +267,7 @@ Return ONLY a valid JSON array, no markdown.`;
 
 async function fetchExpenses(userId: string, startDate: string, endDate: string): Promise<Expense[]> {
     const q = query(
-        collection(db, 'expenses'),
+        collection(db, COLLECTIONS.expenses),
         where('userId', '==', userId),
     );
     const snapshot = await getDocs(q);
@@ -278,7 +278,7 @@ async function fetchExpenses(userId: string, startDate: string, endDate: string)
 
 async function fetchIncomes(userId: string, startDate: string, endDate: string): Promise<Income[]> {
     const q = query(
-        collection(db, 'incomes'),
+        collection(db, COLLECTIONS.incomes),
         where('userId', '==', userId),
     );
     const snapshot = await getDocs(q);
@@ -288,19 +288,13 @@ async function fetchIncomes(userId: string, startDate: string, endDate: string):
 }
 
 async function fetchBudgets(userId: string): Promise<Budget[]> {
-    const q = query(collection(db, 'budgets'), where('userId', '==', userId));
+    const q = query(collection(db, COLLECTIONS.budgets), where('userId', '==', userId));
     const snapshot = await getDocs(q);
     return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Budget));
 }
 
 async function fetchSavingsGoals(userId: string): Promise<SavingsGoal[]> {
-    const q = query(collection(db, 'savings-goals'), where('userId', '==', userId));
+    const q = query(collection(db, COLLECTIONS.savingsGoals), where('userId', '==', userId));
     const snapshot = await getDocs(q);
     return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as SavingsGoal));
-}
-
-async function fetchBalances(userId: string): Promise<any[]> {
-    const q = query(collection(db, 'balances'), where('userId', '==', userId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 }

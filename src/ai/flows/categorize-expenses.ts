@@ -10,6 +10,7 @@
  */
 
 import { groq, TEXT_MODEL, DEFAULT_SETTINGS } from '@/ai/groq';
+import { withRetry } from '@/ai/utils/retry';
 import { EXPENSE_CATEGORIES } from '@/lib/constants';
 
 export interface CategorizeExpenseInput {
@@ -43,18 +44,21 @@ For example:
   "confidence": 0.95
 }`;
 
-  const chatCompletion = await groq.chat.completions.create({
-    messages: [
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
-    model: TEXT_MODEL,
-    temperature: DEFAULT_SETTINGS.temperature,
-    max_tokens: DEFAULT_SETTINGS.max_tokens,
-    top_p: DEFAULT_SETTINGS.top_p,
-  });
+  const chatCompletion = await withRetry(() =>
+    groq.chat.completions.create({
+      messages: [
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+      model: TEXT_MODEL,
+      // Classification has one right answer — no sampling randomness.
+      temperature: 0,
+      max_tokens: DEFAULT_SETTINGS.max_tokens,
+      top_p: DEFAULT_SETTINGS.top_p,
+    }),
+  );
 
   const responseText = chatCompletion.choices[0]?.message?.content || '';
 
